@@ -17,7 +17,11 @@ class AuthProvider extends ChangeNotifier {
   bool get loading => _loading;
 
   Future<void> loadUsers() async {
-    _users = await _authService.getUsers();
+    try {
+      _users = await _authService.getUsers();
+    } catch (_) {
+      _users = [];
+    }
     _loading = false;
     notifyListeners();
   }
