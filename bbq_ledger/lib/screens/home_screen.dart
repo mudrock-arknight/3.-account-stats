@@ -43,10 +43,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BBQ 烧烤账本'),
+        title: const Text('记账本'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.swap_horiz),
+            tooltip: '切换账号',
             onPressed: () {
               auth.logout();
               Navigator.pushReplacement(

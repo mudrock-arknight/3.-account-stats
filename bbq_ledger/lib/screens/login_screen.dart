@@ -13,10 +13,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  AppUser? _selectedUser;
-  final _pinController = TextEditingController();
-  String? _error;
-
   @override
   void initState() {
     super.initState();
@@ -25,27 +21,9 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  @override
-  void dispose() {
-    _pinController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _doLogin() async {
-    if (_selectedUser == null) {
-      setState(() => _error = '请先选择用户');
-      return;
-    }
-    final pin = _pinController.text.trim();
-    if (pin.isEmpty) {
-      setState(() => _error = '请输入 PIN 码');
-      return;
-    }
-
-    final error = await context.read<AuthProvider>().login(_selectedUser!.id, pin);
-    if (error != null) {
-      setState(() => _error = error);
-    } else if (mounted) {
+  Future<void> _doLogin(AppUser user) async {
+    await context.read<AuthProvider>().login(user.id);
+    if (mounted) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -62,78 +40,46 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.outdoor_grill, size: 64, color: Colors.orange),
+              const Icon(Icons.menu_book, size: 64, color: Colors.orange),
               const SizedBox(height: 16),
               Text('记账本', style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 8),
+              Text('选择你的账号', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey)),
               const SizedBox(height: 40),
 
               Consumer<AuthProvider>(
                 builder: (context, auth, _) {
+                  if (auth.loading) {
+                    return const CircularProgressIndicator();
+                  }
+                  if (auth.users.isEmpty) {
+                    return const Text('暂无用户，请先在数据库中添加', style: TextStyle(color: Colors.grey));
+                  }
                   return Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
+                    spacing: 16,
+                    runSpacing: 20,
                     alignment: WrapAlignment.center,
                     children: auth.users.map((user) {
-                      final selected = _selectedUser?.id == user.id;
                       return GestureDetector(
-                        onTap: () => setState(() {
-                          _selectedUser = user;
-                          _error = null;
-                        }),
+                        onTap: () => _doLogin(user),
                         child: Column(
                           children: [
                             CircleAvatar(
-                              radius: 30,
-                              backgroundColor: selected
-                                  ? Colors.orange
-                                  : Color(int.parse(user.avatarColor.replaceFirst('#', '0xFF'))),
+                              radius: 36,
+                              backgroundColor: Color(int.parse(user.avatarColor.replaceFirst('#', '0xFF'))),
                               child: Text(
                                 user.name[0],
-                                style: const TextStyle(fontSize: 24, color: Colors.white),
+                                style: const TextStyle(fontSize: 28, color: Colors.white),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(user.name, style: TextStyle(
-                              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                              color: selected ? Colors.orange : null,
-                            )),
+                            const SizedBox(height: 6),
+                            Text(user.name, style: const TextStyle(fontSize: 14)),
                           ],
                         ),
                       );
                     }).toList(),
                   );
                 },
-              ),
-              const SizedBox(height: 32),
-
-              TextField(
-                controller: _pinController,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                textAlign: TextAlign.center,
-                decoration: const InputDecoration(
-                  labelText: 'PIN 码',
-                  border: OutlineInputBorder(),
-                  counterText: '',
-                  prefixIcon: Icon(Icons.lock_outline),
-                ),
-                onSubmitted: (_) => _doLogin(),
-              ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(_error!, style: const TextStyle(color: Colors.red)),
-                ),
-              const SizedBox(height: 24),
-
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton(
-                  onPressed: _doLogin,
-                  child: const Text('登录', style: TextStyle(fontSize: 18)),
-                ),
               ),
             ],
           ),

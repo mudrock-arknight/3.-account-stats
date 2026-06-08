@@ -1,5 +1,6 @@
 // lib/providers/auth_provider.dart
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
 
@@ -8,24 +9,50 @@ class AuthProvider extends ChangeNotifier {
 
   AppUser? _currentUser;
   List<AppUser> _users = [];
+  bool _loading = true;
 
   AppUser? get currentUser => _currentUser;
   List<AppUser> get users => _users;
   bool get isLoggedIn => _currentUser != null;
+  bool get loading => _loading;
 
   Future<void> loadUsers() async {
     _users = await _authService.getUsers();
+    _loading = false;
     notifyListeners();
   }
 
-  Future<String?> login(String userId, String pin) async {
-    final user = await _authService.login(userId, pin);
-    if (user != null) {
-      _currentUser = user;
-      notifyListeners();
-      return null;
+  Future<void> login(String userId) async {
+    final user = _users.firstWhere(
+      (u) => u.id == userId,
+      orElse: () => _users.first,
+    );
+    _currentUser = user;
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('last_user_id', userId);
+  }
+
+  Future<bool> tryAutoLogin() async {
+    await loadUsers();
+    if (_users.isEmpty) return false;
+
+    final prefs = await SharedPreferences.getInstance();
+    final savedUserId = prefs.getString('last_user_id');
+
+    if (savedUserId != null) {
+      final user = _users.where((u) => u.id == savedUserId).firstOrNull;
+      if (user != null) {
+        _currentUser = user;
+        notifyListeners();
+        return true;
+      }
     }
-    return 'PIN 码错误，请重试';
+
+    _loading = false;
+    notifyListeners();
+    return false;
   }
 
   void logout() {

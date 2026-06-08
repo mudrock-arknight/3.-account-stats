@@ -82,6 +82,73 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     setState(() {});
   }
 
+  Future<void> _addNewProduct() async {
+    final nameController = TextEditingController();
+    final unitController = TextEditingController(text: '箱');
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('添加新货品'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: '货品名称',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: unitController,
+              decoration: const InputDecoration(
+                labelText: '单位',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (nameController.text.trim().isEmpty) return;
+              Navigator.pop(ctx, {
+                'name': nameController.text.trim(),
+                'unit': unitController.text.trim().isEmpty ? '箱' : unitController.text.trim(),
+              });
+            },
+            child: const Text('添加'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      try {
+        final newProduct = await _productService.create(result['name']!, result['unit']!);
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已添加：${newProduct.name}'), backgroundColor: Colors.green),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('添加失败: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _save() async {
     if (_selectedCustomer == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -206,7 +273,17 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           ),
           const SizedBox(height: 16),
 
-          Text('货品明细', style: Theme.of(context).textTheme.titleMedium),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('货品明细', style: Theme.of(context).textTheme.titleMedium),
+              TextButton.icon(
+                onPressed: _addNewProduct,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('新货品'),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
 
           ...List.generate(_items.length, (index) {
