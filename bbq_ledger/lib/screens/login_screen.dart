@@ -64,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const Icon(Icons.outdoor_grill, size: 64, color: Colors.orange),
               const SizedBox(height: 16),
-              Text('BBQ 烧烤账本', style: Theme.of(context).textTheme.headlineMedium),
+              Text('记账本', style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 40),
 
               Consumer<AuthProvider>(

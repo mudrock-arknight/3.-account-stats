@@ -18,7 +18,7 @@ class BbqLedgerApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ReportProvider()),
       ],
       child: MaterialApp(
-        title: 'BBQ 账本',
+        title: '记账本',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorSchemeSeed: Colors.orange,
