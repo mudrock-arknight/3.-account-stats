@@ -50,6 +50,38 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     }
   }
 
+  Widget _buildPivotTable() {
+    final allCustomers = <String>{};
+    for (final row in _report!.customerProductRows) {
+      allCustomers.addAll(row.customerQuantities.keys);
+    }
+    final sortedCustomers = allCustomers.toList()..sort();
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 16,
+        columns: [
+          const DataColumn(label: Text('品类', style: TextStyle(fontWeight: FontWeight.bold))),
+          ...sortedCustomers.map((c) => DataColumn(label: Text(c, style: const TextStyle(fontWeight: FontWeight.bold)))),
+          const DataColumn(label: Text('合计', style: TextStyle(fontWeight: FontWeight.bold))),
+        ],
+        rows: _report!.customerProductRows.map((row) {
+          return DataRow(cells: [
+            DataCell(Text('${row.productName}(${row.productUnit})', style: const TextStyle(fontSize: 12))),
+            ...sortedCustomers.map((c) {
+              final qty = row.customerQuantities[c] ?? 0;
+              return DataCell(Text(qty > 0 ? qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 1) : '-',
+                  style: TextStyle(fontSize: 12, fontWeight: qty > 0 ? FontWeight.bold : FontWeight.normal)));
+            }),
+            DataCell(Text(row.totalQuantity.toStringAsFixed(row.totalQuantity == row.totalQuantity.roundToDouble() ? 0 : 1),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+          ]);
+        }).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currencyFormat = NumberFormat('#,##0.00');
@@ -153,6 +185,12 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_report!.customerProductRows.isNotEmpty) ...[
+                        const Text('客户 × 品类 交叉表', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        _buildPivotTable(),
                         const SizedBox(height: 16),
                       ],
                       if (_report!.customerSummaries.isNotEmpty) ...[

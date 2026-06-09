@@ -21,6 +21,7 @@ class DailyReport {
   final DateTime date;
   final List<DailyCustomerSummary> customerSummaries;
   final List<ProductSalesSummary> productSummaries;
+  final List<CustomerProductRow> customerProductRows;
   final double totalAmount;
   final int orderCount;
 
@@ -28,6 +29,7 @@ class DailyReport {
     required this.date,
     required this.customerSummaries,
     required this.productSummaries,
+    required this.customerProductRows,
     required this.totalAmount,
     required this.orderCount,
   });
@@ -44,6 +46,20 @@ class DailyCustomerSummary {
     required this.customerName,
     required this.totalAmount,
     required this.orderCount,
+  });
+}
+
+class CustomerProductRow {
+  final String productName;
+  final String productUnit;
+  final Map<String, double> customerQuantities;
+  final double totalQuantity;
+
+  const CustomerProductRow({
+    required this.productName,
+    required this.productUnit,
+    required this.customerQuantities,
+    required this.totalQuantity,
   });
 }
 
@@ -143,8 +159,9 @@ class ReportService {
   }
 
   Future<DailyReport> getDailyReport(DateTime date) async {
-    final startOfDay = DateTime(date.year, date.month, date.day);
-    final endOfDay = startOfDay.add(const Duration(days: 1));
+    // Use UTC+8 (China) boundary: date 00:00 China = (date-1) 16:00 UTC
+    final chinaStart = DateTime.utc(date.year, date.month, date.day).subtract(const Duration(hours: 8));
+    final chinaEnd = chinaStart.add(const Duration(days: 1));
 
     final response = await _client
         .from('orders')
@@ -152,8 +169,8 @@ class ReportService {
           *,
           customers:customer_id(name)
         ''')
-        .gte('created_at', startOfDay.toIso8601String())
-        .lt('created_at', endOfDay.toIso8601String())
+        .gte('created_at', chinaStart.toIso8601String())
+        .lt('created_at', chinaEnd.toIso8601String())
         .order('created_at', ascending: false);
 
     final orders = response as List;
@@ -218,10 +235,45 @@ class ReportService {
         ..sort((a, b) => b.totalAmount.compareTo(a.totalAmount));
     }
 
+    // Build customer × product pivot table
+    final Map<String, Map<String, double>> pivot = {}; // productName -> customerName -> qty
+    if (orderIds.isNotEmpty) {
+      final pivotResponse = await _client
+          .from('order_items')
+          .select('''
+            product_id,
+            quantity,
+            products:product_id(name, unit),
+            orders:order_id(customer_id, customers:customer_id(name))
+          ''')
+          .inFilter('order_id', orderIds);
+      for (final item in (pivotResponse as List)) {
+        final pName = item['products']?['name'] ?? '';
+        final pUnit = item['products']?['unit'] ?? '';
+        final cName = item['orders']?['customers']?['name'] ?? '';
+        final qty = (item['quantity'] as num).toDouble();
+        final key = '$pName|$pUnit';
+        pivot.putIfAbsent(key, () => {});
+        pivot[key]!.update(cName, (v) => v + qty, ifAbsent: () => qty);
+      }
+    }
+    final customerProductRows = pivot.entries.map((e) {
+      final parts = e.key.split('|');
+      final totalQty = e.value.values.fold<double>(0, (s, v) => s + v);
+      return CustomerProductRow(
+        productName: parts[0],
+        productUnit: parts.length > 1 ? parts[1] : '',
+        customerQuantities: e.value,
+        totalQuantity: totalQty,
+      );
+    }).toList()
+      ..sort((a, b) => b.totalQuantity.compareTo(a.totalQuantity));
+
     return DailyReport(
       date: date,
       customerSummaries: customerMap.values.toList(),
       productSummaries: productSummaries,
+      customerProductRows: customerProductRows,
       totalAmount: totalAmount,
       orderCount: orders.length,
     );

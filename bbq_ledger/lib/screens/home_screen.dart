@@ -13,6 +13,7 @@ import 'monthly_report_screen.dart';
 import 'daily_report_screen.dart';
 import 'product_management_screen.dart';
 import 'customer_management_screen.dart';
+import 'order_overview_screen.dart';
 import 'import_screen.dart';
 import 'login_screen.dart';
 
@@ -167,6 +168,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const DailyReportScreen()),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.view_list),
+                  title: const Text('订单总览'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const OrderOverviewScreen()),
                   ),
                 ),
                 ListTile(

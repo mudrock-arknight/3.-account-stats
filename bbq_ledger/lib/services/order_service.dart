@@ -147,6 +147,13 @@ class OrderService {
     }).eq('id', orderId);
   }
 
+  Future<void> transfer(String orderId, String toUserId) async {
+    await _client.from('orders').update({
+      'claimed_by': toUserId,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', orderId);
+  }
+
   Future<List<Order>> searchHistory(String query) async {
     final customerResponse = await _client
         .from('customers')

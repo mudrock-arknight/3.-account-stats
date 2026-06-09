@@ -51,4 +51,9 @@ class OrderProvider extends ChangeNotifier {
     await _orderService.markPaid(orderId);
     await loadAll(userId);
   }
+
+  Future<void> transferOrder(String orderId, String fromUserId, String toUserId) async {
+    await _orderService.transfer(orderId, toUserId);
+    await loadAll(fromUserId);
+  }
 }
