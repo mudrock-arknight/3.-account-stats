@@ -25,6 +25,15 @@ class ProductService {
     await _client.from('products').delete().eq('id', id);
   }
 
+  Future<List<Product>> search(String query) async {
+    final response = await _client
+        .from('products')
+        .select()
+        .ilike('name', '%$query%')
+        .order('name');
+    return (response as List).map((e) => Product.fromJson(e)).toList();
+  }
+
   Future<double?> getLastPrice(String customerId, String productId) async {
     final response = await _client
         .from('customer_product_prices')

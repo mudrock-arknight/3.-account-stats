@@ -1,4 +1,5 @@
 // lib/models/order.dart
+import 'dart:convert';
 import 'order_item.dart';
 
 enum OrderStatus { pending, claimed, delivered, completed }
@@ -11,6 +12,9 @@ class Order {
   final String createdByName;
   final String? claimedBy;
   final String? claimedByName;
+  final double? customerLatitude;
+  final double? customerLongitude;
+  final String customerAddress;
   final OrderStatus status;
   final DateTime? deliveryDeadline;
   final double totalAmount;
@@ -28,6 +32,9 @@ class Order {
     required this.createdByName,
     this.claimedBy,
     this.claimedByName,
+    this.customerLatitude,
+    this.customerLongitude,
+    this.customerAddress = '',
     required this.status,
     this.deliveryDeadline,
     this.totalAmount = 0,
@@ -39,10 +46,15 @@ class Order {
   });
 
   factory Order.fromJson(Map<String, dynamic> json, {List<OrderItem> items = const []}) {
+    final notes = (json['customer_notes'] as String?) ?? '';
+    final (lat, lng) = _parseCoords(notes);
     return Order(
       id: json['id'] as String?,
       customerId: json['customer_id'] as String,
       customerName: (json['customer_name'] as String?) ?? '',
+      customerAddress: (json['customer_address'] as String?) ?? '',
+      customerLatitude: lat,
+      customerLongitude: lng,
       createdBy: json['created_by'] as String,
       createdByName: (json['created_by_name'] as String?) ?? '',
       claimedBy: json['claimed_by'] as String?,
@@ -85,6 +97,21 @@ class Order {
       case OrderStatus.claimed: return 'claimed';
       case OrderStatus.delivered: return 'delivered';
       case OrderStatus.completed: return 'completed';
+    }
+  }
+
+  static (double?, double?) _parseCoords(String notes) {
+    if (notes.isEmpty) return (null, null);
+    try {
+      final map = jsonDecode(notes) as Map<String, dynamic>;
+      final lat = map['lat'];
+      final lng = map['lng'];
+      return (
+        lat is num ? lat.toDouble() : null,
+        lng is num ? lng.toDouble() : null,
+      );
+    } catch (_) {
+      return (null, null);
     }
   }
 }

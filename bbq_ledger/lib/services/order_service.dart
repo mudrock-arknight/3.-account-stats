@@ -1,4 +1,5 @@
 // lib/services/order_service.dart
+import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/order.dart';
 import '../models/order_item.dart';
@@ -19,7 +20,7 @@ class OrderService {
       'status': 'pending',
     }).select('''
       *,
-      customers:customer_id(name),
+      customers:customer_id(name, address, notes),
       created_by_user:created_by(name)
     ''').single();
 
@@ -60,7 +61,7 @@ class OrderService {
   }) async {
     var query = _client.from('orders').select('''
       *,
-      customers:customer_id(name),
+      customers:customer_id(name, address, notes),
       created_by_user:created_by(name),
       claimed_by_user:claimed_by(name)
     ''');
@@ -74,10 +75,15 @@ class OrderService {
 
     final response = await query.order('created_at', ascending: false);
     final orders = (response as List).map((row) {
+      final notes = (row['customers']?['notes'] as String?) ?? '';
+      final (lat, lng) = _parseCoords(notes);
       return Order(
         id: row['id'],
         customerId: row['customer_id'],
         customerName: row['customers']?['name'] ?? '',
+        customerAddress: row['customers']?['address'] ?? '',
+        customerLatitude: lat,
+        customerLongitude: lng,
         createdBy: row['created_by'],
         createdByName: row['created_by_user']?['name'] ?? '',
         claimedBy: row['claimed_by'],
@@ -150,7 +156,7 @@ class OrderService {
 
     var orderQuery = _client.from('orders').select('''
       *,
-      customers:customer_id(name),
+      customers:customer_id(name, address, notes),
       created_by_user:created_by(name),
       claimed_by_user:claimed_by(name)
     ''').eq('status', 'completed');
@@ -165,6 +171,7 @@ class OrderService {
         id: row['id'],
         customerId: row['customer_id'],
         customerName: row['customers']?['name'] ?? '',
+        customerAddress: row['customers']?['address'] ?? '',
         createdBy: row['created_by'],
         createdByName: row['created_by_user']?['name'] ?? '',
         claimedBy: row['claimed_by'],
@@ -203,5 +210,21 @@ class OrderService {
     }
 
     return orders;
+  }
+}
+
+/// Helper to parse lat/lng from notes JSON
+(double?, double?) _parseCoords(String notes) {
+  if (notes.isEmpty) return (null, null);
+  try {
+    final map = jsonDecode(notes) as Map<String, dynamic>;
+    final lat = map['lat'];
+    final lng = map['lng'];
+    return (
+      lat is num ? lat.toDouble() : null,
+      lng is num ? lng.toDouble() : null,
+    );
+  } catch (_) {
+    return (null, null);
   }
 }

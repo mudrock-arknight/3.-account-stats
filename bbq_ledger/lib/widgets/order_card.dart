@@ -1,6 +1,7 @@
 // lib/widgets/order_card.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:map_launcher/map_launcher.dart';
 import '../models/order.dart';
 
 class OrderCard extends StatelessWidget {
@@ -61,6 +62,11 @@ class OrderCard extends StatelessWidget {
               _InfoRow(icon: Icons.access_time, text: '要求送达: ${dateFormat.format(order.deliveryDeadline!)}'),
             if (order.deliveredAt != null)
               _InfoRow(icon: Icons.check_circle_outline, text: '实际送达: ${dateFormat.format(order.deliveredAt!)}'),
+            if (order.customerLatitude != null && order.customerLongitude != null && order.customerAddress.isNotEmpty)
+              InkWell(
+                onTap: () => _openNavigation(context, order),
+                child: _InfoRow(icon: Icons.navigation, text: order.customerAddress, color: Colors.blue),
+              ),
             _InfoRow(icon: Icons.person, text: '记账: ${order.createdByName}'),
             if (order.claimedByName != null && order.claimedByName!.isNotEmpty)
               _InfoRow(icon: Icons.delivery_dining, text: '送货: ${order.claimedByName}'),
@@ -110,11 +116,42 @@ class OrderCard extends StatelessWidget {
   }
 }
 
+void _openNavigation(BuildContext context, Order order) async {
+  final availableMaps = await MapLauncher.installedMaps;
+  if (context.mounted && availableMaps.isNotEmpty) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('选择导航应用', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          ...availableMaps.take(5).map((map) => ListTile(
+                leading: Image.asset(map.icon, width: 32, height: 32),
+                title: Text(map.mapName),
+                onTap: () {
+                  map.showDirections(
+                    destination: Coords(order.customerLatitude!, order.customerLongitude!),
+                    destinationTitle: order.customerAddress,
+                  );
+                  Navigator.pop(ctx);
+                },
+              )),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String text;
+  final Color? color;
 
-  const _InfoRow({required this.icon, required this.text});
+  const _InfoRow({required this.icon, required this.text, this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -122,9 +159,9 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 4),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Colors.grey),
+          Icon(icon, size: 14, color: color ?? Colors.grey),
           const SizedBox(width: 4),
-          Text(text, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+          Flexible(child: Text(text, style: TextStyle(fontSize: 13, color: color ?? Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
         ],
       ),
     );

@@ -12,6 +12,8 @@ import 'history_screen.dart';
 import 'monthly_report_screen.dart';
 import 'daily_report_screen.dart';
 import 'product_management_screen.dart';
+import 'customer_management_screen.dart';
+import 'import_screen.dart';
 import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -177,6 +179,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.people),
+                  title: const Text('客户管理'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CustomerManagementScreen()),
+                  ),
+                ),
+                ListTile(
                   leading: const Icon(Icons.inventory),
                   title: const Text('货品管理'),
                   trailing: const Icon(Icons.chevron_right),
@@ -192,6 +203,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const MonthlyReportScreen()),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.file_upload),
+                  title: const Text('导入历史账单'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ImportScreen()),
                   ),
                 ),
               ],
@@ -221,15 +241,17 @@ class _QuickActionCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Card(
-        color: color.withValues(alpha: 0.15),
+        elevation: 2,
+        color: color,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: color, size: 32),
-              const SizedBox(height: 8),
-              Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold),
+              Icon(icon, color: Colors.white, size: 36),
+              const SizedBox(height: 10),
+              Text(label,
+                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                   textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
             ],
           ),
