@@ -15,6 +15,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _tryingAutoLogin = true;
+  String? _errorMsg;
 
   @override
   void initState() {
@@ -26,6 +27,11 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final auth = context.read<AuthProvider>();
       await auth.loadUsers();
+
+      if (auth.error != null) {
+        if (mounted) setState(() { _errorMsg = auth.error; _tryingAutoLogin = false; });
+        return;
+      }
 
       final prefs = await SharedPreferences.getInstance();
       final savedUserId = prefs.getString('last_user_id');
@@ -43,8 +49,8 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         }
       }
-    } catch (_) {
-      // network error or other issue, fall through to show user selection
+    } catch (e) {
+      if (mounted) setState(() { _errorMsg = '初始化失败: $e'; });
     }
 
     if (mounted) {
@@ -81,6 +87,15 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
               Text('记账本', style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 8),
+              if (_errorMsg != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    _errorMsg!,
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               Text('选择你的账号', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey)),
               const SizedBox(height: 40),
 

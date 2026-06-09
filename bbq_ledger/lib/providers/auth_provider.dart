@@ -16,17 +16,23 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoggedIn => _currentUser != null;
   bool get loading => _loading;
 
+String? _error;
+
+  String? get error => _error;
+
   Future<void> loadUsers() async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
     try {
       _users = await _authService.getUsers();
-    } catch (_) {
+    } catch (e) {
+      _error = '加载用户失败: $e';
       _users = [];
     }
     _loading = false;
     notifyListeners();
-  }
-
-  Future<void> login(String userId) async {
+  }Future<void> login(String userId) async {
     final user = _users.firstWhere(
       (u) => u.id == userId,
       orElse: () => _users.first,
