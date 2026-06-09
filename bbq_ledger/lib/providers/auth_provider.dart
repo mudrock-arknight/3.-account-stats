@@ -65,8 +65,10 @@ String? _error;
     return false;
   }
 
-  void logout() {
+  Future<void> logout() async {
     _currentUser = null;
     notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('last_user_id');
   }
 }

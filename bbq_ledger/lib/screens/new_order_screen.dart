@@ -1,6 +1,5 @@
 // lib/screens/new_order_screen.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../models/customer.dart';
 import '../models/product.dart';
 import '../models/order_item.dart';
@@ -8,6 +7,7 @@ import '../services/customer_service.dart';
 import '../services/product_service.dart';
 import '../services/order_service.dart';
 import '../providers/auth_provider.dart';
+import 'package:provider/provider.dart';
 
 class NewOrderScreen extends StatefulWidget {
   const NewOrderScreen({super.key});
@@ -30,14 +30,22 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   final List<_ItemRow> _items = [];
   bool _saving = false;
 
+  final _customerSearchController = TextEditingController();
+  final _productSearchController = TextEditingController();
+  List<Customer> _filteredCustomers = [];
+  List<Product> _filteredProducts = [];
+
   @override
   void initState() {
     super.initState();
+    _deliveryDeadline = DateTime.now();
     _loadData();
   }
 
   @override
   void dispose() {
+    _customerSearchController.dispose();
+    _productSearchController.dispose();
     for (final item in _items) {
       item.dispose();
     }
@@ -82,46 +90,145 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     setState(() {});
   }
 
-  Future<void> _addNewProduct() async {
+  double _calculateTotal() {
+    double total = 0;
+    for (final item in _items) {
+      if (!item.isValid) continue;
+      final qty = double.tryParse(item.quantityController.text) ?? 0;
+      final price = double.tryParse(item.priceController.text) ?? 0;
+      total += qty * price;
+    }
+    return total;
+  }
+
+  // --- Customer picker ---
+  void _showCustomerPicker() async {
+    _filteredCustomers = List.from(_customers);
+    _customerSearchController.clear();
+
+    final result = await showModalBottomSheet<Customer>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          maxChildSize: 0.9,
+          minChildSize: 0.3,
+          expand: false,
+          builder: (ctx, scrollController) => Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _customerSearchController,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: '搜索客户...',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (q) {
+                          setSheetState(() {
+                            _filteredCustomers = q.isEmpty
+                                ? List.from(_customers)
+                                : _customers.where((c) => c.name.toLowerCase().contains(q.toLowerCase())).toList();
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.person_add, color: Colors.orange),
+                      tooltip: '新增客户',
+                      onPressed: () async {
+                        final newCustomer = await _showAddCustomerDialog();
+                        if (newCustomer != null) {
+                          setState(() => _selectedCustomer = newCustomer);
+                          if (ctx.mounted) Navigator.pop(ctx, newCustomer);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _filteredCustomers.isEmpty
+                    ? const Center(child: Text('没有匹配的客户'))
+                    : ListView.builder(
+                        controller: scrollController,
+                        itemCount: _filteredCustomers.length,
+                        itemBuilder: (_, i) {
+                          final c = _filteredCustomers[i];
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.orange.withValues(alpha: 0.2),
+                              child: Text(c.name[0], style: const TextStyle(color: Colors.orange)),
+                            ),
+                            title: Text(c.name),
+                            subtitle: c.phone.isNotEmpty ? Text(c.phone) : null,
+                            trailing: _selectedCustomer?.id == c.id ? const Icon(Icons.check, color: Colors.green) : null,
+                            onTap: () => Navigator.pop(ctx, c),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() => _selectedCustomer = result);
+    }
+  }
+
+  Future<Customer?> _showAddCustomerDialog() async {
     final nameController = TextEditingController();
-    final unitController = TextEditingController(text: '箱');
+    final phoneController = TextEditingController();
+    final addressController = TextEditingController();
 
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('添加新货品'),
+        title: const Text('添加新客户'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(
-                labelText: '货品名称',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: '客户名称 *', border: OutlineInputBorder()),
               autofocus: true,
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: unitController,
-              decoration: const InputDecoration(
-                labelText: '单位',
-                border: OutlineInputBorder(),
-              ),
+              controller: phoneController,
+              decoration: const InputDecoration(labelText: '电话', border: OutlineInputBorder()),
+              keyboardType: TextInputType.phone,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: addressController,
+              decoration: const InputDecoration(labelText: '地址', border: OutlineInputBorder()),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           FilledButton(
             onPressed: () {
               if (nameController.text.trim().isEmpty) return;
               Navigator.pop(ctx, {
                 'name': nameController.text.trim(),
-                'unit': unitController.text.trim().isEmpty ? '箱' : unitController.text.trim(),
+                'phone': phoneController.text.trim(),
+                'address': addressController.text.trim(),
               });
             },
             child: const Text('添加'),
@@ -131,21 +238,84 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     );
 
     if (result != null) {
-      try {
-        final newProduct = await _productService.create(result['name']!, result['unit']!);
-        await _loadData();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已添加：${newProduct.name}'), backgroundColor: Colors.green),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('添加失败: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
+      final customer = await _customerService.create(
+        result['name']!,
+        phone: result['phone'] ?? '',
+        address: result['address'] ?? '',
+      );
+      await _loadData();
+      return customer;
+    }
+    return null;
+  }
+
+  // --- Product picker ---
+  void _showProductPicker(int index) async {
+    _filteredProducts = List.from(_products);
+    _productSearchController.clear();
+
+    final result = await showModalBottomSheet<Product>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          maxChildSize: 0.8,
+          minChildSize: 0.3,
+          expand: false,
+          builder: (ctx, scrollController) => Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  controller: _productSearchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: '搜索货品...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (q) {
+                    setSheetState(() {
+                      _filteredProducts = q.isEmpty
+                          ? List.from(_products)
+                          : _products.where((p) => p.name.toLowerCase().contains(q.toLowerCase())).toList();
+                    });
+                  },
+                ),
+              ),
+              Expanded(
+                child: _filteredProducts.isEmpty
+                    ? const Center(child: Text('没有匹配的货品'))
+                    : ListView.builder(
+                        controller: scrollController,
+                        itemCount: _filteredProducts.length,
+                        itemBuilder: (_, i) {
+                          final p = _filteredProducts[i];
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.orange.withValues(alpha: 0.2),
+                              child: Text(p.name[0], style: const TextStyle(color: Colors.orange)),
+                            ),
+                            title: Text(p.name),
+                            trailing: Text(p.unit, style: const TextStyle(color: Colors.grey)),
+                            onTap: () => Navigator.pop(ctx, p),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      await _onProductSelected(index, result);
     }
   }
 
@@ -169,13 +339,13 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
     try {
       final user = context.read<AuthProvider>().currentUser!;
-      final deliveryDeadline = _deliveryDeadline != null && _deliveryTime != null
+      final deliveryDeadline = _deliveryDeadline != null
           ? DateTime(
               _deliveryDeadline!.year,
               _deliveryDeadline!.month,
               _deliveryDeadline!.day,
-              _deliveryTime!.hour,
-              _deliveryTime!.minute,
+              _deliveryTime?.hour ?? 23,
+              _deliveryTime?.minute ?? 59,
             )
           : null;
 
@@ -221,20 +391,24 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          DropdownButtonFormField<Customer>(
-            initialValue: _selectedCustomer,
-            decoration: const InputDecoration(
-              labelText: '选择客户',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.person),
+          // Customer selection
+          InkWell(
+            onTap: () => _showCustomerPicker(),
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: '选择客户',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
+                suffixIcon: Icon(Icons.search),
+              ),
+              child: _selectedCustomer != null
+                  ? Text(_selectedCustomer!.name, style: const TextStyle(fontSize: 16))
+                  : const Text('点击选择客户', style: TextStyle(color: Colors.grey)),
             ),
-            items: _customers.map((c) => DropdownMenuItem(
-              value: c, child: Text(c.name),
-            )).toList(),
-            onChanged: (c) => setState(() => _selectedCustomer = c),
           ),
           const SizedBox(height: 16),
 
+          // Delivery date & time
           Row(
             children: [
               Expanded(
@@ -243,11 +417,12 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                   title: Text(_deliveryDeadline != null
                       ? '${_deliveryDeadline!.month}/${_deliveryDeadline!.day}'
                       : '送达日期'),
+                  subtitle: const Text('送达日期', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () async {
                     final date = await showDatePicker(
                       context: context,
-                      initialDate: DateTime.now(),
+                      initialDate: _deliveryDeadline ?? DateTime.now(),
                       firstDate: DateTime.now(),
                       lastDate: DateTime.now().add(const Duration(days: 30)),
                     );
@@ -258,8 +433,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
               Expanded(
                 child: ListTile(
                   leading: const Icon(Icons.access_time),
-                  title: Text(_deliveryTime?.format(context) ?? '送达时间'),
-                  trailing: const Icon(Icons.chevron_right),
+                  title: Text(_deliveryTime?.format(context) ?? '不限'),
+                  subtitle: const Text('送达时间（可选）', style: TextStyle(fontSize: 12)),
+                  trailing: _deliveryTime != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => setState(() => _deliveryTime = null),
+                        )
+                      : const Icon(Icons.chevron_right),
                   onTap: () async {
                     final time = await showTimePicker(
                       context: context,
@@ -273,19 +454,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           ),
           const SizedBox(height: 16),
 
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('货品明细', style: Theme.of(context).textTheme.titleMedium),
-              TextButton.icon(
-                onPressed: _addNewProduct,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('新货品'),
-              ),
-            ],
-          ),
+          // Products header
+          Text('货品明细', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
 
+          // Product items
           ...List.generate(_items.length, (index) {
             final item = _items[index];
             return Card(
@@ -293,56 +466,54 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Row 1: Product name + unit
+                    InkWell(
+                      onTap: () => _showProductPicker(index),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: '货品',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        child: item.product != null
+                            ? Text('${item.product!.name} (${item.product!.unit})',
+                                maxLines: 2, overflow: TextOverflow.ellipsis)
+                            : const Text('点击选择货品', style: TextStyle(color: Colors.grey)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Row 2: Quantity + Price + subtotal + delete
                     Row(
                       children: [
-                        Expanded(
-                          child: DropdownButtonFormField<Product>(
-                            initialValue: item.product,
-                            decoration: const InputDecoration(
-                              labelText: '货品',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            items: _products.map((p) => DropdownMenuItem(
-                              value: p,
-                              child: Text('${p.name} (${p.unit})'),
-                            )).toList(),
-                            onChanged: (p) {
-                              if (p != null) _onProductSelected(index, p);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                         SizedBox(
-                          width: 80,
+                          width: 70,
                           child: TextField(
                             controller: item.quantityController,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: '数量',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
+                            decoration: const InputDecoration(labelText: '数量', border: OutlineInputBorder(), isDense: true),
                           ),
                         ),
                         const SizedBox(width: 8),
                         SizedBox(
-                          width: 100,
+                          width: 90,
                           child: TextField(
                             controller: item.priceController,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(
-                              labelText: '单价',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                              prefixText: '¥',
-                            ),
+                            decoration: const InputDecoration(labelText: '单价', border: OutlineInputBorder(), isDense: true, prefixText: '¥'),
                           ),
                         ),
+                        const Spacer(),
+                        if (item.isValid)
+                          Text('¥${((double.tryParse(item.quantityController.text) ?? 0) * (double.tryParse(item.priceController.text) ?? 0)).toStringAsFixed(2)}',
+                              style: const TextStyle(fontWeight: FontWeight.bold)),
                         IconButton(
-                          icon: const Icon(Icons.remove_circle, color: Colors.red),
+                          icon: const Icon(Icons.remove_circle, color: Colors.red, size: 20),
                           onPressed: () => _removeItem(index),
+                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                          padding: EdgeInsets.zero,
                         ),
                       ],
                     ),
@@ -357,6 +528,28 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             icon: const Icon(Icons.add),
             label: const Text('添加货品'),
           ),
+
+          // Total
+          if (_items.any((i) => i.isValid)) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('合计', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    '¥${_calculateTotal().toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.orange),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           const SizedBox(height: 24),
 

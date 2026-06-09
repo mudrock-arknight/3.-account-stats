@@ -58,7 +58,9 @@ class OrderCard extends StatelessWidget {
             const SizedBox(height: 8),
 
             if (order.deliveryDeadline != null)
-              _InfoRow(icon: Icons.access_time, text: '${dateFormat.format(order.deliveryDeadline!)} 前送达'),
+              _InfoRow(icon: Icons.access_time, text: '要求送达: ${dateFormat.format(order.deliveryDeadline!)}'),
+            if (order.deliveredAt != null)
+              _InfoRow(icon: Icons.check_circle_outline, text: '实际送达: ${dateFormat.format(order.deliveredAt!)}'),
             _InfoRow(icon: Icons.person, text: '记账: ${order.createdByName}'),
             if (order.claimedByName != null && order.claimedByName!.isNotEmpty)
               _InfoRow(icon: Icons.delivery_dining, text: '送货: ${order.claimedByName}'),

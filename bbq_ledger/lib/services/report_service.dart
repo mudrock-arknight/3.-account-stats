@@ -17,6 +17,36 @@ class MonthlyReport {
   });
 }
 
+class DailyReport {
+  final DateTime date;
+  final List<DailyCustomerSummary> customerSummaries;
+  final List<ProductSalesSummary> productSummaries;
+  final double totalAmount;
+  final int orderCount;
+
+  const DailyReport({
+    required this.date,
+    required this.customerSummaries,
+    required this.productSummaries,
+    required this.totalAmount,
+    required this.orderCount,
+  });
+}
+
+class DailyCustomerSummary {
+  final String customerId;
+  final String customerName;
+  final double totalAmount;
+  final int orderCount;
+
+  const DailyCustomerSummary({
+    required this.customerId,
+    required this.customerName,
+    required this.totalAmount,
+    required this.orderCount,
+  });
+}
+
 class ProductSalesSummary {
   final String productId;
   final String productName;
@@ -108,6 +138,91 @@ class ReportService {
       productSummaries: summaryMap.values.toList()
         ..sort((a, b) => b.totalAmount.compareTo(a.totalAmount)),
       totalRevenue: totalRevenue,
+      orderCount: orders.length,
+    );
+  }
+
+  Future<DailyReport> getDailyReport(DateTime date) async {
+    final startOfDay = DateTime(date.year, date.month, date.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+
+    final response = await _client
+        .from('orders')
+        .select('''
+          *,
+          customers:customer_id(name)
+        ''')
+        .gte('created_at', startOfDay.toIso8601String())
+        .lt('created_at', endOfDay.toIso8601String())
+        .order('created_at', ascending: false);
+
+    final orders = response as List;
+    final orderIds = orders.map((o) => o['id'] as String).toList();
+    final totalAmount = orders.fold<double>(0, (sum, o) => sum + ((o['total_amount'] as num?)?.toDouble() ?? 0));
+
+    final Map<String, DailyCustomerSummary> customerMap = {};
+    for (final o in orders) {
+      final cid = o['customer_id'] as String;
+      final cname = o['customers']?['name'] ?? '';
+      final amt = (o['total_amount'] as num?)?.toDouble() ?? 0;
+      if (customerMap.containsKey(cid)) {
+        final existing = customerMap[cid]!;
+        customerMap[cid] = DailyCustomerSummary(
+          customerId: cid, customerName: cname,
+          totalAmount: existing.totalAmount + amt,
+          orderCount: existing.orderCount + 1,
+        );
+      } else {
+        customerMap[cid] = DailyCustomerSummary(
+          customerId: cid, customerName: cname,
+          totalAmount: amt, orderCount: 1,
+        );
+      }
+    }
+
+    List<ProductSalesSummary> productSummaries = [];
+    if (orderIds.isNotEmpty) {
+      final itemResponse = await _client
+          .from('order_items')
+          .select('''
+            product_id,
+            quantity,
+            unit_price,
+            subtotal,
+            products:product_id(name, unit)
+          ''')
+          .inFilter('order_id', orderIds);
+
+      final Map<String, ProductSalesSummary> productMap = {};
+      for (final item in (itemResponse as List)) {
+        final pid = item['product_id'] as String;
+        final name = item['products']?['name'] ?? '';
+        final unit = item['products']?['unit'] ?? '';
+        final qty = (item['quantity'] as num).toDouble();
+        final subtotalAmt = (item['subtotal'] as num).toDouble();
+        if (productMap.containsKey(pid)) {
+          final e = productMap[pid]!;
+          productMap[pid] = ProductSalesSummary(
+            productId: pid, productName: name, productUnit: unit,
+            totalQuantity: e.totalQuantity + qty,
+            totalAmount: e.totalAmount + subtotalAmt,
+          );
+        } else {
+          productMap[pid] = ProductSalesSummary(
+            productId: pid, productName: name, productUnit: unit,
+            totalQuantity: qty, totalAmount: subtotalAmt,
+          );
+        }
+      }
+      productSummaries = productMap.values.toList()
+        ..sort((a, b) => b.totalAmount.compareTo(a.totalAmount));
+    }
+
+    return DailyReport(
+      date: date,
+      customerSummaries: customerMap.values.toList(),
+      productSummaries: productSummaries,
+      totalAmount: totalAmount,
       orderCount: orders.length,
     );
   }

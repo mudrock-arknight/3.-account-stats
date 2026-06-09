@@ -140,4 +140,68 @@ class OrderService {
       'updated_at': DateTime.now().toIso8601String(),
     }).eq('id', orderId);
   }
+
+  Future<List<Order>> searchHistory(String query) async {
+    final customerResponse = await _client
+        .from('customers')
+        .select('id')
+        .ilike('name', '%$query%');
+    final customerIds = (customerResponse as List).map((c) => c['id'] as String).toList();
+
+    var orderQuery = _client.from('orders').select('''
+      *,
+      customers:customer_id(name),
+      created_by_user:created_by(name),
+      claimed_by_user:claimed_by(name)
+    ''').eq('status', 'completed');
+
+    if (customerIds.isNotEmpty) {
+      orderQuery = orderQuery.inFilter('customer_id', customerIds);
+    }
+
+    final response = await orderQuery.order('created_at', ascending: false);
+    final orders = (response as List).map((row) {
+      return Order(
+        id: row['id'],
+        customerId: row['customer_id'],
+        customerName: row['customers']?['name'] ?? '',
+        createdBy: row['created_by'],
+        createdByName: row['created_by_user']?['name'] ?? '',
+        claimedBy: row['claimed_by'],
+        claimedByName: row['claimed_by_user']?['name'] ?? '',
+        status: Order.parseStatus(row['status']),
+        deliveryDeadline: row['delivery_deadline'] != null
+            ? DateTime.parse(row['delivery_deadline'])
+            : null,
+        totalAmount: (row['total_amount'] as num?)?.toDouble() ?? 0,
+        isPaid: row['is_paid'] ?? false,
+        paidAt: row['paid_at'] != null ? DateTime.parse(row['paid_at']) : null,
+        deliveredAt: row['delivered_at'] != null ? DateTime.parse(row['delivered_at']) : null,
+        createdAt: DateTime.parse(row['created_at']),
+      );
+    }).toList();
+
+    if (query.isNotEmpty && customerIds.length < orders.length) {
+      final itemResponse = await _client
+          .from('order_items')
+          .select('order_id, products:product_id(name)')
+          .inFilter('order_id', orders.map((o) => o.id!).toList());
+
+      final matchedOrderIds = (itemResponse as List)
+          .where((item) {
+            final productName = (item['products']?['name'] ?? '').toString().toLowerCase();
+            return productName.contains(query.toLowerCase());
+          })
+          .map((item) => item['order_id'] as String)
+          .toSet();
+
+      if (customerIds.isEmpty) {
+        orders.retainWhere((o) => matchedOrderIds.contains(o.id));
+      } else {
+        orders.retainWhere((o) => customerIds.contains(o.customerId) || matchedOrderIds.contains(o.id));
+      }
+    }
+
+    return orders;
+  }
 }

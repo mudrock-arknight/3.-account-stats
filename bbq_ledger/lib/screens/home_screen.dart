@@ -10,6 +10,8 @@ import 'my_deliveries_screen.dart';
 import 'unpaid_screen.dart';
 import 'history_screen.dart';
 import 'monthly_report_screen.dart';
+import 'daily_report_screen.dart';
+import 'product_management_screen.dart';
 import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -48,12 +50,15 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.swap_horiz),
             tooltip: '切换账号',
-            onPressed: () {
-              auth.logout();
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
+            onPressed: () async {
+              await auth.logout();
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
             },
           ),
         ],
@@ -93,64 +98,75 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                SizedBox(
-                  height: 100,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      _QuickActionCard(
-                        icon: Icons.add_circle,
-                        label: '记一笔',
-                        color: Colors.green,
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const NewOrderScreen()),
-                          );
-                          _refresh();
-                        },
-                      ),
-                      _QuickActionCard(
-                        icon: Icons.inbox,
-                        label: '待认领 (${orderProvider.pendingOrders.length})',
-                        color: Colors.orange,
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const OrderPoolScreen()),
-                          );
-                          _refresh();
-                        },
-                      ),
-                      _QuickActionCard(
-                        icon: Icons.delivery_dining,
-                        label: '我送的 (${orderProvider.myDeliveries.length})',
-                        color: Colors.blue,
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const MyDeliveriesScreen()),
-                          );
-                          _refresh();
-                        },
-                      ),
-                      _QuickActionCard(
-                        icon: Icons.attach_money,
-                        label: '未收款 (${orderProvider.unpaidOrders.length})',
-                        color: Colors.red,
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const UnpaidScreen()),
-                          );
-                          _refresh();
-                        },
-                      ),
-                    ],
-                  ),
+                GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.3,
+                  children: [
+                    _QuickActionCard(
+                      icon: Icons.add_circle,
+                      label: '记一笔',
+                      color: Colors.green,
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const NewOrderScreen()),
+                        );
+                        _refresh();
+                      },
+                    ),
+                    _QuickActionCard(
+                      icon: Icons.inbox,
+                      label: '待认领 (${orderProvider.pendingOrders.length})',
+                      color: Colors.orange,
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const OrderPoolScreen()),
+                        );
+                        _refresh();
+                      },
+                    ),
+                    _QuickActionCard(
+                      icon: Icons.delivery_dining,
+                      label: '我送的 (${orderProvider.myDeliveries.length})',
+                      color: Colors.blue,
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const MyDeliveriesScreen()),
+                        );
+                        _refresh();
+                      },
+                    ),
+                    _QuickActionCard(
+                      icon: Icons.attach_money,
+                      label: '未收款 (${orderProvider.unpaidOrders.length})',
+                      color: Colors.red,
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const UnpaidScreen()),
+                        );
+                        _refresh();
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
+                ListTile(
+                  leading: const Icon(Icons.table_chart),
+                  title: const Text('每日总表'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const DailyReportScreen()),
+                  ),
+                ),
                 ListTile(
                   leading: const Icon(Icons.history),
                   title: const Text('历史账单'),
@@ -158,6 +174,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.inventory),
+                  title: const Text('货品管理'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProductManagementScreen()),
                   ),
                 ),
                 ListTile(
@@ -197,16 +222,14 @@ class _QuickActionCard extends StatelessWidget {
       onTap: onTap,
       child: Card(
         color: color.withValues(alpha: 0.15),
-        margin: const EdgeInsets.only(right: 12),
-        child: Container(
-          width: 110,
+        child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(height: 6),
-              Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
+              Icon(icon, color: color, size: 32),
+              const SizedBox(height: 8),
+              Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
             ],
           ),

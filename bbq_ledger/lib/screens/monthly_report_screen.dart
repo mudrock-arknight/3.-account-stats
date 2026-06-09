@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
 import '../providers/report_provider.dart';
+import '../services/export_service.dart';
 
 class MonthlyReportScreen extends StatefulWidget {
   const MonthlyReportScreen({super.key});
@@ -13,6 +16,7 @@ class MonthlyReportScreen extends StatefulWidget {
 }
 
 class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
+  final ExportService _exportService = ExportService();
   int _selectedYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
 
@@ -26,12 +30,35 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
     context.read<ReportProvider>().loadReport(_selectedYear, _selectedMonth);
   }
 
+  Future<void> _export() async {
+    final report = context.read<ReportProvider>().report;
+    if (report == null) return;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final path = await _exportService.exportMonthlyReport(report!, dir.path);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已导出到: $path'), action: SnackBarAction(label: '打开', onPressed: () => OpenFile.open(path))),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导出失败: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currencyFormat = NumberFormat('#,##0.00');
 
     return Scaffold(
-      appBar: AppBar(title: const Text('月度汇总报表')),
+      appBar: AppBar(
+        title: const Text('月度汇总报表'),
+        actions: [
+          IconButton(icon: const Icon(Icons.file_download), tooltip: '导出Excel', onPressed: _export),
+        ],
+      ),
       body: Consumer<ReportProvider>(
         builder: (context, reportProvider, _) {
           return Column(
@@ -114,7 +141,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
                         BarChartData(
                           alignment: BarChartAlignment.spaceAround,
                           maxY: reportProvider.report!.productSummaries
-                              .map((s) => s.totalQuantity)
+                              .map((s) => s.totalAmount)
                               .reduce((a, b) => a > b ? a : b) * 1.3,
                           barGroups: reportProvider.report!.productSummaries.take(10).map((s) {
                             final idx = reportProvider.report!.productSummaries.indexOf(s);
@@ -122,7 +149,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
                               x: idx,
                               barRods: [
                                 BarChartRodData(
-                                  toY: s.totalQuantity,
+                                  toY: s.totalAmount,
                                   color: Colors.orange,
                                   width: 20,
                                   borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
@@ -151,7 +178,7 @@ class _MonthlyReportScreenState extends State<MonthlyReportScreen> {
                               ),
                             ),
                             leftTitles: const AxisTitles(
-                              sideTitles: SideTitles(showTitles: true, reservedSize: 30),
+                              sideTitles: SideTitles(showTitles: true, reservedSize: 35),
                             ),
                             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                             rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
