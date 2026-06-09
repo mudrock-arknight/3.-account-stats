@@ -154,12 +154,25 @@ class OrderService {
     }).eq('id', orderId);
   }
 
-  Future<List<Order>> searchHistory(String query) async {
-    final customerResponse = await _client
-        .from('customers')
-        .select('id')
-        .ilike('name', '%$query%');
-    final customerIds = (customerResponse as List).map((c) => c['id'] as String).toList();
+  Future<List<Order>> searchHistory(
+    String query, {
+    DateTime? dateFrom,
+    DateTime? dateTo,
+  }) async {
+    // Split query by spaces to support "王老板 鸡柳" combined search
+    final keywords = query.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+
+    // Find matching customers
+    Set<String> customerIds = {};
+    for (final kw in keywords) {
+      final customerResponse = await _client
+          .from('customers')
+          .select('id')
+          .ilike('name', '%$kw%');
+      customerIds.addAll(
+        (customerResponse as List).map((c) => c['id'] as String),
+      );
+    }
 
     var orderQuery = _client.from('orders').select('''
       *,
@@ -169,16 +182,30 @@ class OrderService {
     ''').eq('status', 'completed');
 
     if (customerIds.isNotEmpty) {
-      orderQuery = orderQuery.inFilter('customer_id', customerIds);
+      orderQuery = orderQuery.inFilter('customer_id', customerIds.toList());
+    }
+
+    // Date range filter
+    if (dateFrom != null) {
+      orderQuery = orderQuery.gte('created_at', dateFrom.toIso8601String());
+    }
+    if (dateTo != null) {
+      // Include the whole end day
+      final endDay = DateTime(dateTo.year, dateTo.month, dateTo.day, 23, 59, 59);
+      orderQuery = orderQuery.lte('created_at', endDay.toIso8601String());
     }
 
     final response = await orderQuery.order('created_at', ascending: false);
-    final orders = (response as List).map((row) {
+    var orders = (response as List).map((row) {
+      final notes = (row['customers']?['notes'] as String?) ?? '';
+      final (lat, lng) = _parseCoords(notes);
       return Order(
         id: row['id'],
         customerId: row['customer_id'],
         customerName: row['customers']?['name'] ?? '',
         customerAddress: row['customers']?['address'] ?? '',
+        customerLatitude: lat,
+        customerLongitude: lng,
         createdBy: row['created_by'],
         createdByName: row['created_by_user']?['name'] ?? '',
         claimedBy: row['claimed_by'],
@@ -195,25 +222,59 @@ class OrderService {
       );
     }).toList();
 
-    if (query.isNotEmpty && customerIds.length < orders.length) {
+    // Product keyword filtering — also fetch items for matched orders
+    final productKeywords = keywords.where((kw) {
+      // A keyword is a product keyword if it doesn't match any customer name
+      return !orders.any((o) => o.customerName.toLowerCase().contains(kw.toLowerCase()));
+    }).toList();
+
+    if (productKeywords.isNotEmpty && orders.isNotEmpty) {
+      final orderIds = orders.map((o) => o.id!).toList();
       final itemResponse = await _client
           .from('order_items')
           .select('order_id, products:product_id(name)')
-          .inFilter('order_id', orders.map((o) => o.id!).toList());
+          .inFilter('order_id', orderIds);
 
-      final matchedOrderIds = (itemResponse as List)
-          .where((item) {
-            final productName = (item['products']?['name'] ?? '').toString().toLowerCase();
-            return productName.contains(query.toLowerCase());
-          })
-          .map((item) => item['order_id'] as String)
-          .toSet();
+      // For each product keyword, find matching orders
+      for (final kw in productKeywords) {
+        final matchedOrderIds = (itemResponse as List)
+            .where((item) {
+              final productName = (item['products']?['name'] ?? '').toString().toLowerCase();
+              return productName.contains(kw.toLowerCase());
+            })
+            .map((item) => item['order_id'] as String)
+            .toSet();
 
-      if (customerIds.isEmpty) {
         orders.retainWhere((o) => matchedOrderIds.contains(o.id));
-      } else {
-        orders.retainWhere((o) => customerIds.contains(o.customerId) || matchedOrderIds.contains(o.id));
       }
+    }
+
+    // Load items for each order (needed for summary)
+    for (final order in orders) {
+      final items = await getOrderItems(order.id!);
+      // Replace the empty items list with real items
+      final orderWithItems = Order(
+        id: order.id,
+        customerId: order.customerId,
+        customerName: order.customerName,
+        customerAddress: order.customerAddress,
+        customerLatitude: order.customerLatitude,
+        customerLongitude: order.customerLongitude,
+        createdBy: order.createdBy,
+        createdByName: order.createdByName,
+        claimedBy: order.claimedBy,
+        claimedByName: order.claimedByName,
+        status: order.status,
+        deliveryDeadline: order.deliveryDeadline,
+        totalAmount: order.totalAmount,
+        isPaid: order.isPaid,
+        paidAt: order.paidAt,
+        deliveredAt: order.deliveredAt,
+        createdAt: order.createdAt,
+        items: items,
+      );
+      final idx = orders.indexOf(order);
+      orders[idx] = orderWithItems;
     }
 
     return orders;

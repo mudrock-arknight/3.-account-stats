@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   final double? initialLat;
@@ -27,6 +28,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   LatLng? _picked;
   final _searchController = TextEditingController();
   bool _searching = false;
+  bool _locating = true;
   List<_SearchResult> _searchResults = [];
 
   @override
@@ -36,6 +38,40 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _lng = widget.initialLng ?? 116.4074;
     if (widget.initialLat != null) {
       _picked = LatLng(_lat, _lng);
+      _locating = false;
+    }
+    _getCurrentLocation();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        final result = await Geolocator.requestPermission();
+        if (result != LocationPermission.whileInUse && result != LocationPermission.always) {
+          setState(() => _locating = false);
+          return;
+        }
+      }
+      if (permission == LocationPermission.deniedForever) {
+        setState(() => _locating = false);
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
+      );
+      if (mounted) {
+        setState(() {
+          _lat = position.latitude;
+          _lng = position.longitude;
+          _picked = LatLng(_lat, _lng);
+          _locating = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _locating = false);
     }
   }
 
@@ -46,7 +82,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   Future<void> _search(String query) async {
-    if (query.trim().isEmpty) {
+    if (query.trim().length < 2) {
       setState(() => _searchResults = []);
       return;
     }
@@ -60,17 +96,26 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       final response = await http.get(uri, headers: {'User-Agent': 'BBQLedger/1.0'});
       if (response.statusCode == 200) {
         final list = jsonDecode(response.body) as List;
-        setState(() {
-          _searchResults = list.map((item) => _SearchResult(
-                name: item['display_name'] ?? '',
-                lat: double.parse(item['lat']),
-                lng: double.parse(item['lon']),
-              )).toList();
-          _searching = false;
-        });
+        if (mounted) {
+          setState(() {
+            _searchResults = list.map((item) => _SearchResult(
+                  name: item['display_name'] ?? '',
+                  lat: double.parse(item['lat'].toString()),
+                  lng: double.parse(item['lon'].toString()),
+                )).toList();
+            _searching = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _searching = false);
       }
-    } catch (_) {
-      setState(() => _searching = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _searching = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('搜索失败: $e'), duration: const Duration(seconds: 2)),
+        );
+      }
     }
   }
 
@@ -98,95 +143,110 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          FlutterMap(
-            options: MapOptions(
-              initialCenter: LatLng(_lat, _lng),
-              initialZoom: 15.0,
-              onTap: (tapPosition, point) {
-                setState(() => _picked = point);
-              },
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.bbq.ledger',
+      body: _locating
+          ? const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('正在获取当前位置...'),
+                ],
               ),
-              if (_picked != null)
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: _picked!,
-                      child: const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.location_on, color: Colors.red, size: 40),
-                          Text('已选位置', style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold, backgroundColor: Colors.white70)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-          // Search bar
-          Positioned(
-            top: 10,
-            left: 10,
-            right: 10,
-            child: Material(
-              elevation: 4,
-              borderRadius: BorderRadius.circular(8),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: '搜索地址...',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                  suffixIcon: _searching
-                      ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                      : _searchController.text.isNotEmpty
-                          ? IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() { _searchController.clear(); _searchResults = []; }))
-                          : null,
-                ),
-                onChanged: _search,
-              ),
-            ),
-          ),
-          // Search results
-          if (_searchResults.isNotEmpty)
-            Positioned(
-              top: 60,
-              left: 10,
-              right: 10,
-              child: Material(
-                elevation: 4,
-                borderRadius: BorderRadius.circular(8),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: _searchResults.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, i) {
-                      final r = _searchResults[i];
-                      return ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.location_on, color: Colors.blue),
-                        title: Text(r.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                        onTap: () => _goTo(r.lat, r.lng),
-                      );
+            )
+          : Stack(
+              children: [
+                FlutterMap(
+                  options: MapOptions(
+                    initialCenter: LatLng(_lat, _lng),
+                    initialZoom: 16.0,
+                    onTap: (tapPosition, point) {
+                      setState(() => _picked = point);
                     },
                   ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.bbq.ledger',
+                    ),
+                    if (_picked != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _picked!,
+                            child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+                          ),
+                        ],
+                      ),
+                  ],
                 ),
-              ),
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  right: 10,
+                  child: Material(
+                    elevation: 4,
+                    borderRadius: BorderRadius.circular(8),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: '搜索地址...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                        suffixIcon: _searching
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                              )
+                            : _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () => setState(() {
+                                      _searchController.clear();
+                                      _searchResults = [];
+                                    }),
+                                  )
+                                : null,
+                      ),
+                      onChanged: _search,
+                    ),
+                  ),
+                ),
+                if (_searchResults.isNotEmpty)
+                  Positioned(
+                    top: 60,
+                    left: 10,
+                    right: 10,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: _searchResults.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final r = _searchResults[i];
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.location_on, color: Colors.blue),
+                              title: Text(r.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                              onTap: () => _goTo(r.lat, r.lng),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }

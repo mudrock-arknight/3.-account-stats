@@ -35,6 +35,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   List<Customer> _filteredCustomers = [];
   List<Product> _filteredProducts = [];
 
+  // Common units
+  static const List<String> _commonUnits = ['包', '件', '条', '斤', '箱', '瓶', '袋', '盒'];
+
   @override
   void initState() {
     super.initState();
@@ -79,15 +82,37 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     item.product = product;
     item.quantityController.text = '1';
 
+    // Default unit from product
+    item.unit = product.unit;
+
     if (_selectedCustomer != null) {
-      final lastPrice = await _productService.getLastPrice(
+      // Look up last used unit and price
+      final result = await _productService.getLastUnitPrice(
         _selectedCustomer!.id, product.id,
       );
-      if (lastPrice != null) {
-        item.priceController.text = lastPrice.toStringAsFixed(2);
+      if (result.unit != null && result.unit!.isNotEmpty) {
+        item.unit = result.unit!;
+      }
+      if (result.price != null) {
+        item.priceController.text = result.price!.toStringAsFixed(2);
       }
     }
     setState(() {});
+  }
+
+  Future<void> _onUnitChanged(int index) async {
+    final item = _items[index];
+    if (item.product == null || _selectedCustomer == null) return;
+
+    // When unit changes, look up price for this unit
+    final result = await _productService.getLastUnitPrice(
+      _selectedCustomer!.id, item.product!.id,
+    );
+    // Only update price if the stored unit matches and price exists
+    if (result.unit == item.unit && result.price != null) {
+      item.priceController.text = result.price!.toStringAsFixed(2);
+      setState(() {});
+    }
   }
 
   double _calculateTotal() {
@@ -356,15 +381,18 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
         items: validItems.map((item) => OrderItem(
           productId: item.product!.id,
           productName: item.product!.name,
-          productUnit: item.product!.unit,
+          productUnit: item.unit,
           quantity: double.tryParse(item.quantityController.text) ?? 1,
           unitPrice: double.tryParse(item.priceController.text) ?? 0,
         )).toList(),
       );
 
+      // Save unit+price memory for each item
       for (final item in validItems) {
         final price = double.tryParse(item.priceController.text) ?? 0;
-        await _productService.savePrice(_selectedCustomer!.id, item.product!.id, price);
+        await _productService.saveUnitPrice(
+          _selectedCustomer!.id, item.product!.id, item.unit, price,
+        );
       }
 
       if (mounted) {
@@ -461,66 +489,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           // Product items
           ...List.generate(_items.length, (index) {
             final item = _items[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Row 1: Product name + unit
-                    InkWell(
-                      onTap: () => _showProductPicker(index),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: '货品',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        child: item.product != null
-                            ? Text('${item.product!.name} (${item.product!.unit})',
-                                maxLines: 2, overflow: TextOverflow.ellipsis)
-                            : const Text('点击选择货品', style: TextStyle(color: Colors.grey)),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Row 2: Quantity + Price + subtotal + delete
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 70,
-                          child: TextField(
-                            controller: item.quantityController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: '数量', border: OutlineInputBorder(), isDense: true),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 90,
-                          child: TextField(
-                            controller: item.priceController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(labelText: '单价', border: OutlineInputBorder(), isDense: true, prefixText: '¥'),
-                          ),
-                        ),
-                        const Spacer(),
-                        if (item.isValid)
-                          Text('¥${((double.tryParse(item.quantityController.text) ?? 0) * (double.tryParse(item.priceController.text) ?? 0)).toStringAsFixed(2)}',
-                              style: const TextStyle(fontWeight: FontWeight.bold)),
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle, color: Colors.red, size: 20),
-                          onPressed: () => _removeItem(index),
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
+            return _buildItemCard(index, item);
           }),
 
           TextButton.icon(
@@ -567,10 +536,110 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       ),
     );
   }
+
+  Widget _buildItemCard(int index, _ItemRow item) {
+    // Build unit list (common units + product's default unit if unique)
+    final units = <String>[..._commonUnits];
+    if (item.product != null && !units.contains(item.product!.unit)) {
+      units.insert(0, item.product!.unit);
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Row 1: Product name + unit dropdown
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _showProductPicker(index),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: '货品',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      child: item.product != null
+                          ? Text(item.product!.name, maxLines: 1, overflow: TextOverflow.ellipsis)
+                          : const Text('点击选择货品', style: TextStyle(color: Colors.grey)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 70,
+                  child: DropdownButtonFormField<String>(
+                    value: units.contains(item.unit) ? item.unit : units.first,
+                    decoration: const InputDecoration(
+                      labelText: '单位',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    ),
+                    isExpanded: true,
+                    items: units.map((u) => DropdownMenuItem(value: u, child: Text(u, style: const TextStyle(fontSize: 13)))).toList(),
+                    onChanged: item.product != null
+                        ? (v) {
+                            if (v != null) {
+                              item.unit = v;
+                              _onUnitChanged(index);
+                            }
+                          }
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Row 2: Quantity + Price + subtotal + delete
+            Row(
+              children: [
+                SizedBox(
+                  width: 70,
+                  child: TextField(
+                    controller: item.quantityController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: '数量', border: OutlineInputBorder(), isDense: true),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 90,
+                  child: TextField(
+                    controller: item.priceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: '单价', border: OutlineInputBorder(), isDense: true, prefixText: '¥'),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const Spacer(),
+                if (item.isValid)
+                  Text('¥${((double.tryParse(item.quantityController.text) ?? 0) * (double.tryParse(item.priceController.text) ?? 0)).toStringAsFixed(2)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                IconButton(
+                  icon: const Icon(Icons.remove_circle, color: Colors.red, size: 20),
+                  onPressed: () => _removeItem(index),
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  padding: EdgeInsets.zero,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ItemRow {
   Product? product;
+  String unit = '包';
   final TextEditingController quantityController = TextEditingController();
   final TextEditingController priceController = TextEditingController();
 

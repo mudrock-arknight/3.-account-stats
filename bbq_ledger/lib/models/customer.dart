@@ -53,12 +53,21 @@ class Customer {
 
   String _buildNotes() {
     final map = <String, dynamic>{};
-    try {
-      // Preserve existing non-coord notes
-      if (notes.isNotEmpty && !notes.startsWith('{')) {
+    // Parse existing notes if it's valid JSON — preserve all keys
+    if (notes.isNotEmpty) {
+      try {
+        final existing = jsonDecode(notes);
+        if (existing is Map<String, dynamic>) {
+          map.addAll(existing);
+        } else {
+          map['text'] = notes;
+        }
+      } catch (_) {
+        // Not JSON, store as text note
         map['text'] = notes;
       }
-    } catch (_) {}
+    }
+    // Update coords (always fresh)
     if (latitude != null) map['lat'] = latitude;
     if (longitude != null) map['lng'] = longitude;
     return map.isEmpty ? '' : jsonEncode(map);

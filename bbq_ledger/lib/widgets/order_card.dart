@@ -1,5 +1,6 @@
 // lib/widgets/order_card.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:map_launcher/map_launcher.dart';
 import '../models/order.dart';
@@ -66,6 +67,11 @@ class OrderCard extends StatelessWidget {
               InkWell(
                 onTap: () => _openNavigation(context, order),
                 child: _InfoRow(icon: Icons.navigation, text: order.customerAddress, color: Colors.blue),
+              )
+            else if (order.customerAddress.isNotEmpty)
+              InkWell(
+                onTap: () => _copyAddress(context, order.customerAddress),
+                child: _InfoRow(icon: Icons.location_on, text: order.customerAddress, color: Colors.grey),
               ),
             _InfoRow(icon: Icons.person, text: '记账: ${order.createdByName}'),
             if (order.claimedByName != null && order.claimedByName!.isNotEmpty)
@@ -144,6 +150,13 @@ void _openNavigation(BuildContext context, Order order) async {
       ),
     );
   }
+}
+
+void _copyAddress(BuildContext context, String address) {
+  Clipboard.setData(ClipboardData(text: address));
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('地址已复制到剪贴板'), duration: Duration(seconds: 1)),
+  );
 }
 
 class _InfoRow extends StatelessWidget {

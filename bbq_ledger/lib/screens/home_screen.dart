@@ -105,124 +105,65 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisCount: 2,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.3,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 1.1,
                   children: [
-                    _QuickActionCard(
-                      icon: Icons.add_circle,
-                      label: '记一笔',
-                      color: Colors.green,
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const NewOrderScreen()),
-                        );
-                        _refresh();
-                      },
-                    ),
-                    _QuickActionCard(
-                      icon: Icons.inbox,
-                      label: '待认领 (${orderProvider.pendingOrders.length})',
-                      color: Colors.orange,
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const OrderPoolScreen()),
-                        );
-                        _refresh();
-                      },
-                    ),
-                    _QuickActionCard(
-                      icon: Icons.delivery_dining,
-                      label: '我送的 (${orderProvider.myDeliveries.length})',
-                      color: Colors.blue,
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const MyDeliveriesScreen()),
-                        );
-                        _refresh();
-                      },
-                    ),
-                    _QuickActionCard(
-                      icon: Icons.attach_money,
-                      label: '未收款 (${orderProvider.unpaidOrders.length})',
-                      color: Colors.red,
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const UnpaidScreen()),
-                        );
-                        _refresh();
-                      },
-                    ),
+                    _QuickActionCard(icon: Icons.add_circle, label: '记一笔', color: Colors.green, onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const NewOrderScreen()));
+                      _refresh();
+                    }),
+                    _QuickActionCard(icon: Icons.inbox, label: '待认领 (${orderProvider.pendingOrders.length})', color: Colors.orange, onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderPoolScreen()));
+                      _refresh();
+                    }),
+                    _QuickActionCard(icon: Icons.delivery_dining, label: '我送的 (${orderProvider.myDeliveries.length})', color: Colors.blue, onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const MyDeliveriesScreen()));
+                      _refresh();
+                    }),
+                    _QuickActionCard(icon: Icons.attach_money, label: '未收款 (${orderProvider.unpaidOrders.length})', color: Colors.red, onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const UnpaidScreen()));
+                      _refresh();
+                    }),
+                    _QuickActionCard(icon: Icons.table_chart, label: '每日总表', color: Colors.purple, onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyReportScreen()));
+                    }),
+                    _QuickActionCard(icon: Icons.view_list, label: '订单总览', color: Colors.teal, onTap: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderOverviewScreen()));
+                    }),
                   ],
                 ),
                 const SizedBox(height: 16),
 
                 ListTile(
-                  leading: const Icon(Icons.table_chart),
-                  title: const Text('每日总表'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const DailyReportScreen()),
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.view_list),
-                  title: const Text('订单总览'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const OrderOverviewScreen()),
-                  ),
-                ),
-                ListTile(
                   leading: const Icon(Icons.history),
                   title: const Text('历史账单'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                  ),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryScreen())),
                 ),
                 ListTile(
                   leading: const Icon(Icons.people),
                   title: const Text('客户管理'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const CustomerManagementScreen()),
-                  ),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerManagementScreen())),
                 ),
                 ListTile(
                   leading: const Icon(Icons.inventory),
                   title: const Text('货品管理'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ProductManagementScreen()),
-                  ),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductManagementScreen())),
                 ),
                 ListTile(
                   leading: const Icon(Icons.bar_chart),
                   title: const Text('月度汇总报表'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MonthlyReportScreen()),
-                  ),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MonthlyReportScreen())),
                 ),
                 ListTile(
                   leading: const Icon(Icons.file_upload),
                   title: const Text('导入历史账单'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ImportScreen()),
-                  ),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ImportScreen())),
                 ),
               ],
             );
@@ -239,12 +180,7 @@ class _QuickActionCard extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _QuickActionCard({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
+  const _QuickActionCard({required this.icon, required this.label, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -254,14 +190,14 @@ class _QuickActionCard extends StatelessWidget {
         elevation: 2,
         color: color,
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(10),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: Colors.white, size: 36),
-              const SizedBox(height: 10),
+              Icon(icon, color: Colors.white, size: 30),
+              const SizedBox(height: 6),
               Text(label,
-                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                   textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
             ],
           ),
