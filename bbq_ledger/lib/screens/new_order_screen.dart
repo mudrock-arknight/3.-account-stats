@@ -327,7 +327,6 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                               child: Text(p.name[0], style: const TextStyle(color: Colors.orange)),
                             ),
                             title: Text(p.name),
-                            trailing: Text(p.unit, style: const TextStyle(color: Colors.grey)),
                             onTap: () => Navigator.pop(ctx, p),
                           );
                         },

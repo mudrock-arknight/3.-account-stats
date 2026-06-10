@@ -37,21 +37,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final orders = await _orderService.getOrders(statuses: ['completed']);
-    // Load items for each order
-    for (final order in orders) {
-      final items = await _orderService.getOrderItems(order.id!);
-      final idx = orders.indexOf(order);
-      orders[idx] = Order(
-        id: order.id, customerId: order.customerId, customerName: order.customerName,
-        customerAddress: order.customerAddress, customerLatitude: order.customerLatitude,
-        customerLongitude: order.customerLongitude, createdBy: order.createdBy,
-        createdByName: order.createdByName, claimedBy: order.claimedBy,
-        claimedByName: order.claimedByName, status: order.status,
-        deliveryDeadline: order.deliveryDeadline, totalAmount: order.totalAmount,
-        isPaid: order.isPaid, paidAt: order.paidAt, deliveredAt: order.deliveredAt,
-        createdAt: order.createdAt, items: items,
-      );
+
+    // Batch-load items in parallel — much faster than sequential loop
+    if (orders.isNotEmpty) {
+      final futures = orders.map((o) => _orderService.getOrderItems(o.id!));
+      final itemsList = await Future.wait(futures);
+
+      for (var i = 0; i < orders.length; i++) {
+        orders[i] = Order(
+          id: orders[i].id, customerId: orders[i].customerId, customerName: orders[i].customerName,
+          customerAddress: orders[i].customerAddress, customerLatitude: orders[i].customerLatitude,
+          customerLongitude: orders[i].customerLongitude, createdBy: orders[i].createdBy,
+          createdByName: orders[i].createdByName, claimedBy: orders[i].claimedBy,
+          claimedByName: orders[i].claimedByName, status: orders[i].status,
+          deliveryDeadline: orders[i].deliveryDeadline, totalAmount: orders[i].totalAmount,
+          isPaid: orders[i].isPaid, paidAt: orders[i].paidAt, deliveredAt: orders[i].deliveredAt,
+          createdAt: orders[i].createdAt, items: itemsList[i],
+        );
+      }
     }
+
     setState(() {
       _orders = orders;
       _loading = false;
@@ -69,14 +74,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
     final q = query?.trim() ?? '';
 
-    // Extract product keywords
     final keywords = q.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
     final customerKeywords = keywords.where((k) =>
       orders.any((o) => o.customerName.toLowerCase().contains(k.toLowerCase()))
     ).toList();
     _productKeywords = keywords.where((k) => !customerKeywords.contains(k)).toList();
 
-    // Build summary if there are search keywords
     _summary = null;
     if (q.isNotEmpty && orders.isNotEmpty) {
       _summary = _buildSummary(orders, q);
@@ -228,7 +231,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }).toList();
   }
 
-  /// Filter items by product keywords if any
   List<OrderItem> _filteredItems(Order order) {
     if (_productKeywords.isEmpty) return order.items;
     return order.items.where((item) =>
@@ -267,8 +269,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 child: Row(
                   children: [
                     Expanded(flex: 3, child: Text('${item.productName} ×${item.quantity}${item.productUnit}', style: const TextStyle(fontSize: 13))),
-                    Text('¥${item.unitPrice.toStringAsFixed(2)}/${item.productUnit} × ${item.quantity}${item.productUnit} = ', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    Text('¥${currencyFormat.format(item.calculatedSubtotal)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    Expanded(flex: 2, child: Text('¥${item.unitPrice.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: Colors.grey))),
+                    Expanded(flex: 2, child: Text('¥${currencyFormat.format(item.calculatedSubtotal)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
                   ],
                 ),
               )),
@@ -332,29 +334,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           ),
 
-          // Search bar
+          // Search bar (standalone, full width, no right button to stay within bounds)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: '搜索客户名 货品名（如：王老板 鸡柳）',
-                      prefixIcon: const Icon(Icons.search),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchController.clear(); _load(); })
-                          : null,
-                    ),
-                    onSubmitted: (v) => _search(query: v, from: _dateFrom, to: _dateTo),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(icon: const Icon(Icons.search), onPressed: () => _search(query: _searchController.text.trim(), from: _dateFrom, to: _dateTo)),
-              ],
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: '搜客户名 货品名',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                prefixIcon: const Icon(Icons.search, size: 20),
+                border: const OutlineInputBorder(),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchController.clear(); _load(); })
+                    : null,
+              ),
+              style: const TextStyle(fontSize: 14),
+              onSubmitted: (v) => _search(query: v, from: _dateFrom, to: _dateTo),
             ),
           ),
 
