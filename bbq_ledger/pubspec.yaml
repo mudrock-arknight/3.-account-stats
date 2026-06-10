@@ -23,6 +23,7 @@ dependencies:
   flutter_map: ^7.0.0
   latlong2: ^0.9.0
   map_launcher: ^3.0.0
+  flutter_contacts: ^1.1.9
 
 dev_dependencies:
   flutter_test:

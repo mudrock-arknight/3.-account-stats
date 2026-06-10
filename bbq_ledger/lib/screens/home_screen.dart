@@ -111,19 +111,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     _QuickActionCard(icon: Icons.add_circle, label: '记一笔', color: Colors.green, onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => const NewOrderScreen()));
-                      _refresh();
+                      _refresh(); // New order created, need refresh
                     }),
                     _QuickActionCard(icon: Icons.inbox, label: '待认领 (${orderProvider.pendingOrders.length})', color: Colors.orange, onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => const OrderPoolScreen()));
-                      _refresh();
+                      // OrderPoolScreen refreshes internally after claim, no need to refresh here
                     }),
                     _QuickActionCard(icon: Icons.delivery_dining, label: '我送的 (${orderProvider.myDeliveries.length})', color: Colors.blue, onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => const MyDeliveriesScreen()));
-                      _refresh();
+                      // MyDeliveriesScreen refreshes internally after action, no need to refresh here
                     }),
                     _QuickActionCard(icon: Icons.attach_money, label: '未收款 (${orderProvider.unpaidOrders.length})', color: Colors.red, onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => const UnpaidScreen()));
-                      _refresh();
+                      // UnpaidScreen refreshes internally after action, no need to refresh here
                     }),
                     _QuickActionCard(icon: Icons.table_chart, label: '每日总表', color: Colors.purple, onTap: () async {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyReportScreen()));

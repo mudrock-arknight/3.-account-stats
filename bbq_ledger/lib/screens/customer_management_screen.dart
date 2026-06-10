@@ -1,5 +1,6 @@
 // lib/screens/customer_management_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 import '../models/customer.dart';
 import '../services/customer_service.dart';
 import 'location_picker_screen.dart';
@@ -176,10 +177,126 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen> {
     await _load();
   }
 
+  Future<void> _importFromContacts() async {
+    // Request permission
+    if (!await FlutterContacts.requestPermission()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('需要通讯录权限才能导入联系人')),
+        );
+      }
+      return;
+    }
+
+    // Load contacts with phone numbers
+    final contacts = await FlutterContacts.getContacts(
+      withProperties: true,
+      withPhoto: false,
+    );
+
+    // Filter: only contacts with name and phone
+    final valid = contacts.where((c) =>
+      c.displayName.isNotEmpty &&
+      c.phones.isNotEmpty
+    ).toList();
+
+    if (valid.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('没有找到有效的联系人')),
+        );
+      }
+      return;
+    }
+
+    // Show selection dialog
+    final selected = <Contact>{};
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('从通讯录导入'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('找到 ${valid.length} 个联系人，选择要导入的：'),
+                const SizedBox(height: 8),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: valid.length,
+                    itemBuilder: (_, i) {
+                      final c = valid[i];
+                      final phone = c.phones.first.number;
+                      final isSelected = selected.contains(c);
+                      return CheckboxListTile(
+                        dense: true,
+                        title: Text(c.displayName, style: const TextStyle(fontSize: 14)),
+                        subtitle: Text(phone, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        value: isSelected,
+                        onChanged: (v) {
+                          setDialogState(() {
+                            if (v == true) selected.add(c); else selected.remove(c);
+                          });
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+            FilledButton(
+              onPressed: selected.isEmpty ? null : () async {
+                Navigator.pop(ctx);
+                // Import selected contacts
+                int imported = 0;
+                for (final c in selected) {
+                  final existing = _customers.where((cust) =>
+                    cust.name == c.displayName || (c.phones.isNotEmpty && cust.phone == c.phones.first.number)
+                  );
+                  if (existing.isEmpty) {
+                    await _customerService.create(
+                      c.displayName,
+                      phone: c.phones.first.number,
+                      address: c.addresses.isNotEmpty ? c.addresses.first.address : '',
+                    );
+                    imported++;
+                  }
+                }
+                await _load();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('成功导入 $imported 个客户')),
+                  );
+                }
+              },
+              child: Text('导入 (${selected.length})'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('客户管理')),
+      appBar: AppBar(
+        title: const Text('客户管理'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.contacts),
+            tooltip: '从通讯录导入',
+            onPressed: _importFromContacts,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

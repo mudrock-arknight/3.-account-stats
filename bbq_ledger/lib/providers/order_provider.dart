@@ -11,6 +11,7 @@ class OrderProvider extends ChangeNotifier {
   List<Order> _unpaidOrders = [];
   List<Order> _historyOrders = [];
   bool _loading = false;
+  bool _initialized = false;
 
   List<Order> get pendingOrders => _pendingOrders;
   List<Order> get myDeliveries => _myDeliveries;
@@ -19,8 +20,11 @@ class OrderProvider extends ChangeNotifier {
   bool get loading => _loading;
 
   Future<void> loadAll(String currentUserId) async {
-    _loading = true;
-    notifyListeners();
+    // Only show loading spinner on first load; subsequent loads update in background
+    if (!_initialized) {
+      _loading = true;
+      notifyListeners();
+    }
 
     final results = await Future.wait([
       _orderService.getOrders(statuses: ['pending']),
@@ -34,6 +38,7 @@ class OrderProvider extends ChangeNotifier {
     _unpaidOrders = results[2];
     _historyOrders = results[3];
     _loading = false;
+    _initialized = true;
     notifyListeners();
   }
 

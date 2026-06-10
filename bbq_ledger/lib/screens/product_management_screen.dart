@@ -18,7 +18,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
   final _searchController = TextEditingController();
   List<Product> _filtered = [];
 
-  static const _units = ['包', '件', '条', '箱', '斤', '公斤', '袋', '瓶', '桶'];
+  static const _units = ['包', '件', '条'];
 
   @override
   void initState() {
@@ -52,7 +52,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
 
   Future<void> _add() async {
     final nameController = TextEditingController();
-    String selectedUnit = '箱';
+    String selectedUnit = '包';
 
     final result = await showDialog<Map<String, String>>(
       context: context,

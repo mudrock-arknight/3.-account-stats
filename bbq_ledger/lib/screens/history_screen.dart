@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/order.dart';
+import '../models/order_item.dart';
 import '../services/order_service.dart';
-import '../widgets/order_card.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -20,6 +20,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   List<Order> _orders = [];
   bool _loading = true;
   Map<String, _CustomerSummary>? _summary;
+  List<String> _productKeywords = [];
 
   @override
   void initState() {
@@ -36,10 +37,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     final orders = await _orderService.getOrders(statuses: ['completed']);
+    // Load items for each order
+    for (final order in orders) {
+      final items = await _orderService.getOrderItems(order.id!);
+      final idx = orders.indexOf(order);
+      orders[idx] = Order(
+        id: order.id, customerId: order.customerId, customerName: order.customerName,
+        customerAddress: order.customerAddress, customerLatitude: order.customerLatitude,
+        customerLongitude: order.customerLongitude, createdBy: order.createdBy,
+        createdByName: order.createdByName, claimedBy: order.claimedBy,
+        claimedByName: order.claimedByName, status: order.status,
+        deliveryDeadline: order.deliveryDeadline, totalAmount: order.totalAmount,
+        isPaid: order.isPaid, paidAt: order.paidAt, deliveredAt: order.deliveredAt,
+        createdAt: order.createdAt, items: items,
+      );
+    }
     setState(() {
       _orders = orders;
       _loading = false;
       _summary = null;
+      _productKeywords = [];
     });
   }
 
@@ -51,6 +68,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
       dateTo: to,
     );
     final q = query?.trim() ?? '';
+
+    // Extract product keywords
+    final keywords = q.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+    final customerKeywords = keywords.where((k) =>
+      orders.any((o) => o.customerName.toLowerCase().contains(k.toLowerCase()))
+    ).toList();
+    _productKeywords = keywords.where((k) => !customerKeywords.contains(k)).toList();
 
     // Build summary if there are search keywords
     _summary = null;
@@ -69,16 +93,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final customerKeyword = keywords.where((k) => _matchCustomer(orders, k)).toList();
     final productKeyword = keywords.where((k) => _matchProduct(orders, k)).toList();
 
-    // Don't show summary for single keyword only matching customer or product
     if (customerKeyword.isEmpty && productKeyword.isEmpty) return {};
 
     final map = <String, _CustomerSummary>{};
     for (final order in orders) {
       final key = order.customerName;
-      if (!map.containsKey(key)) {
-        map[key] = _CustomerSummary(customerName: key);
-      }
-      final total = order.items.fold<double>(0, (s, i) => s + i.calculatedSubtotal);
+      map.putIfAbsent(key, () => _CustomerSummary(customerName: key));
+      final items = _productKeywords.isNotEmpty
+          ? order.items.where((i) => _productKeywords.any((k) => i.productName.toLowerCase().contains(k.toLowerCase()))).toList()
+          : order.items;
+      final total = items.fold<double>(0, (s, i) => s + i.calculatedSubtotal);
       map[key]!.totalAmount += total;
       map[key]!.orderCount++;
       map[key]!.orders.add(order);
@@ -100,7 +124,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (_summary == null || _summary!.isEmpty) return;
     final currencyFormat = NumberFormat('#,##0.00');
 
-    // Build product lookup
     final allProducts = <String>{};
     for (final cs in _summary!.values) {
       for (final o in cs.orders) {
@@ -154,7 +177,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           ),
                           subtitle: Text('${cs.orderCount}笔订单'),
                           children: [
-                            // Product detail
                             ..._buildCustomerProductRows(cs, sortedProducts, currencyFormat),
                             const SizedBox(height: 8),
                           ],
@@ -197,25 +219,64 @@ class _HistoryScreenState extends State<HistoryScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
         child: Row(
           children: [
-            Expanded(
-              flex: 3,
-              child: Text('${agg.name} ×${agg.totalQty}${agg.unit}', style: const TextStyle(fontSize: 13)),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text('¥${agg.prices.map((p) => p.toStringAsFixed(2)).join("/")}',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text('¥${fmt.format(agg.totalAmount)}',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  textAlign: TextAlign.right),
-            ),
+            Expanded(flex: 3, child: Text('${agg.name} ×${agg.totalQty}${agg.unit}', style: const TextStyle(fontSize: 13))),
+            Expanded(flex: 2, child: Text('¥${agg.prices.map((p) => p.toStringAsFixed(2)).join("/")}', style: const TextStyle(fontSize: 11, color: Colors.grey))),
+            Expanded(flex: 2, child: Text('¥${fmt.format(agg.totalAmount)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
           ],
         ),
       );
     }).toList();
+  }
+
+  /// Filter items by product keywords if any
+  List<OrderItem> _filteredItems(Order order) {
+    if (_productKeywords.isEmpty) return order.items;
+    return order.items.where((item) =>
+      _productKeywords.any((k) => item.productName.toLowerCase().contains(k.toLowerCase()))
+    ).toList();
+  }
+
+  Widget _buildOrderCard(Order order) {
+    final dateFormat = DateFormat('MM/dd HH:mm');
+    final currencyFormat = NumberFormat('#,##0.00');
+    final items = _filteredItems(order);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text(order.customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                Text('¥${currencyFormat.format(order.totalAmount)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.orange)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (order.createdAt != null)
+              Text(dateFormat.format(order.createdAt!), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            if (order.paidAt != null)
+              Text('收款: ${dateFormat.format(order.paidAt!)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            if (items.isNotEmpty) ...[
+              const Divider(height: 16),
+              ...items.map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Expanded(flex: 3, child: Text('${item.productName} ×${item.quantity}${item.productUnit}', style: const TextStyle(fontSize: 13))),
+                    Text('¥${item.unitPrice.toStringAsFixed(2)}/${item.productUnit} × ${item.quantity}${item.productUnit} = ', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text('¥${currencyFormat.format(item.calculatedSubtotal)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              )),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -223,12 +284,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final dateFormat = DateFormat('MM/dd');
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('历史账单'),
-      ),
+      appBar: AppBar(title: const Text('历史账单')),
       body: Column(
         children: [
-          // Date range + search
+          // Date range
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Row(
@@ -248,40 +307,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       }
                     },
                     child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: '开始', border: OutlineInputBorder(), isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                      child: Text(_dateFrom != null ? dateFormat.format(_dateFrom!) : '不限',
-                          style: TextStyle(fontSize: 13, color: _dateFrom != null ? null : Colors.grey)),
+                      decoration: const InputDecoration(labelText: '开始', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                      child: Text(_dateFrom != null ? dateFormat.format(_dateFrom!) : '不限', style: TextStyle(fontSize: 13, color: _dateFrom != null ? null : Colors.grey)),
                     ),
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: Text('至', style: TextStyle(color: Colors.grey)),
-                ),
+                const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('至', style: TextStyle(color: Colors.grey))),
                 Expanded(
                   child: InkWell(
                     onTap: () async {
-                      final date = await showDatePicker(
-                        context: context,
-                        initialDate: _dateTo ?? DateTime.now(),
-                        firstDate: DateTime(2024),
-                        lastDate: DateTime.now(),
-                      );
+                      final date = await showDatePicker(context: context, initialDate: _dateTo ?? DateTime.now(), firstDate: DateTime(2024), lastDate: DateTime.now());
                       if (date != null) {
                         setState(() => _dateTo = date);
                         _search(query: _searchController.text.trim(), from: _dateFrom, to: _dateTo);
                       }
                     },
                     child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: '结束', border: OutlineInputBorder(), isDense: true,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                      child: Text(_dateTo != null ? dateFormat.format(_dateTo!) : '不限',
-                          style: TextStyle(fontSize: 13, color: _dateTo != null ? null : Colors.grey)),
+                      decoration: const InputDecoration(labelText: '结束', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                      child: Text(_dateTo != null ? dateFormat.format(_dateTo!) : '不限', style: TextStyle(fontSize: 13, color: _dateTo != null ? null : Colors.grey)),
                     ),
                   ),
                 ),
@@ -303,23 +346,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       border: const OutlineInputBorder(),
                       isDense: true,
                       suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchController.clear();
-                                _load();
-                              },
-                            )
+                          ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchController.clear(); _load(); })
                           : null,
                     ),
                     onSubmitted: (v) => _search(query: v, from: _dateFrom, to: _dateTo),
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: () => _search(query: _searchController.text.trim(), from: _dateFrom, to: _dateTo),
-                ),
+                IconButton(icon: const Icon(Icons.search), onPressed: () => _search(query: _searchController.text.trim(), from: _dateFrom, to: _dateTo)),
               ],
             ),
           ),
@@ -343,14 +377,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextButton(
-                onPressed: () {
-                  setState(() {
-                    _dateFrom = null;
-                    _dateTo = null;
-                  });
-                  _searchController.clear();
-                  _load();
-                },
+                onPressed: () { setState(() { _dateFrom = null; _dateTo = null; }); _searchController.clear(); _load(); },
                 child: const Text('清除筛选'),
               ),
             ),
@@ -362,78 +389,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 : RefreshIndicator(
                     onRefresh: _load,
                     child: _orders.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.search_off, size: 48, color: Colors.grey.shade400),
-                                const SizedBox(height: 8),
-                                const Text('暂无匹配的历史账单'),
-                              ],
-                            ),
-                          )
+                        ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.search_off, size: 48, color: Colors.grey.shade400), const SizedBox(height: 8), const Text('暂无匹配的历史账单')]))
                         : ListView.builder(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             itemCount: _orders.length,
-                            itemBuilder: (context, index) {
-                              final order = _orders[index];
-                              return OrderCard(
-                                order: order,
-                                onAction: () => _showDetail(order),
-                                actionLabel: '查看明细',
-                                actionColor: Colors.grey,
-                              );
-                            },
+                            itemBuilder: (context, index) => _buildOrderCard(_orders[index]),
                           ),
                   ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showDetail(Order order) async {
-    final items = await _orderService.getOrderItems(order.id!);
-    if (!mounted) return;
-    final currencyFormat = NumberFormat('#,##0.00');
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        maxChildSize: 0.8,
-        minChildSize: 0.3,
-        expand: false,
-        builder: (ctx, scrollController) => Padding(
-          padding: const EdgeInsets.all(16),
-          child: ListView(
-            controller: scrollController,
-            children: [
-              Text('${order.customerName} — 订单明细', style: Theme.of(context).textTheme.titleMedium),
-              const Divider(),
-              ...items.map((item) => ListTile(
-                    title: Text('${item.productName} × ${item.quantity}${item.productUnit}'),
-                    subtitle: Text('单价 ¥${item.unitPrice.toStringAsFixed(2)}'),
-                    trailing: Text('¥${currencyFormat.format(item.calculatedSubtotal)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                  )),
-              const Divider(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('总金额', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  Text('¥${currencyFormat.format(order.totalAmount)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.orange)),
-                ],
-              ),
-              if (order.paidAt != null)
-                Text('收款时间: ${DateFormat('yyyy-MM-dd HH:mm').format(order.paidAt!)}',
-                    style: const TextStyle(color: Colors.grey)),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -444,7 +408,6 @@ class _CustomerSummary {
   double totalAmount = 0;
   int orderCount = 0;
   final List<Order> orders = [];
-
   _CustomerSummary({required this.customerName});
 }
 
@@ -454,6 +417,5 @@ class _ProductAgg {
   double totalQty = 0;
   double totalAmount = 0;
   final List<double> prices = [];
-
   _ProductAgg({required this.name, required this.unit});
 }

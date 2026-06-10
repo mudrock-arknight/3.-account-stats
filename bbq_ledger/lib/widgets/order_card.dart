@@ -60,7 +60,12 @@ class OrderCard extends StatelessWidget {
             const SizedBox(height: 8),
 
             if (order.deliveryDeadline != null)
-              _InfoRow(icon: Icons.access_time, text: '要求送达: ${dateFormat.format(order.deliveryDeadline!)}'),
+              _InfoRow(
+                icon: Icons.access_time,
+                text: '送达: ${dateFormat.format(order.deliveryDeadline!)}',
+                color: Colors.red,
+                bold: true,
+              ),
             if (order.deliveredAt != null)
               _InfoRow(icon: Icons.check_circle_outline, text: '实际送达: ${dateFormat.format(order.deliveredAt!)}'),
             if (order.customerAddress.isNotEmpty)
@@ -215,8 +220,9 @@ class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String text;
   final Color? color;
+  final bool bold;
 
-  const _InfoRow({required this.icon, required this.text, this.color});
+  const _InfoRow({required this.icon, required this.text, this.color, this.bold = false});
 
   @override
   Widget build(BuildContext context) {
@@ -224,9 +230,9 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(top: 4),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: color ?? Colors.grey),
+          Icon(icon, size: bold ? 16 : 14, color: color ?? Colors.grey),
           const SizedBox(width: 4),
-          Flexible(child: Text(text, style: TextStyle(fontSize: 13, color: color ?? Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          Flexible(child: Text(text, style: TextStyle(fontSize: bold ? 15 : 13, color: color ?? Colors.grey, fontWeight: bold ? FontWeight.bold : FontWeight.normal), maxLines: 1, overflow: TextOverflow.ellipsis)),
         ],
       ),
     );
