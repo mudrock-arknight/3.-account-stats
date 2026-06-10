@@ -101,39 +101,47 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     }
     setState(() => _searching = true);
     try {
-      // Use Amap (高德) POI search API — works in China, no API key required for basic usage
-      // Uses the public search service available for embedded maps
+      // Use Photon (Komoot) geocoding API — free, no key required, based on OpenStreetMap data
       final uri = Uri.https(
-        'restapi.amap.com',
-        '/v3/place/text',
-        {
-          'keywords': query,
-          'key': '4f3184a6115d886806e8d7a5d2b89102', // Public demo key
-          'citylimit': 'false',
-          'output': 'json',
-        },
+        'photon.komoot.io',
+        '/api/',
+        {'q': query, 'limit': '5', 'lang': 'zh'},
       );
 
-      final response = await http.get(uri);
+      final response = await http.get(
+        uri,
+        headers: {'User-Agent': 'BBQLedger/1.0'},
+      ).timeout(const Duration(seconds: 8));
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final pois = data['pois'] as List? ?? [];
+        final features = data['features'] as List? ?? [];
         if (mounted) {
           setState(() {
-            _searchResults = pois.where((p) => p['location'] != null && p['location'].toString().isNotEmpty).take(5).map((item) {
-              final locStr = item['location'] as String;
-              final parts = locStr.split(',');
-              // Amap returns (lng, lat) in GCJ-02
-              final gcjLng = double.parse(parts[0]);
-              final gcjLat = double.parse(parts[1]);
-              // Convert back to WGS-84 for storage
-              final wgs = _gcj02ToWgs84(gcjLat, gcjLng);
+            _searchResults = features.map((f) {
+              final props = f['properties'] as Map<String, dynamic>? ?? {};
+              final geom = f['geometry'] as Map<String, dynamic>? ?? {};
+              final coords = (geom['coordinates'] as List?) ?? [0, 0];
+              // Photon returns (lng, lat) in WGS-84
+              final lng = (coords[0] as num).toDouble();
+              final lat = (coords[1] as num).toDouble();
+              // Build display name from available properties
+              final parts = <String>[
+                props['name']?.toString(),
+                props['street']?.toString(),
+                props['city']?.toString(),
+                props['state']?.toString(),
+              ].where((s) => s != null && s.isNotEmpty).cast<String>().toList();
+              final displayName = parts.join(', ');
+
+              // Convert WGS-84 to GCJ-02 for display on Amap tiles
+              final gcj = _wgs84ToGcj02(lat, lng);
               return _SearchResult(
-                name: '${item['name']}${item['address'] != null ? ' - ${item['address']}' : ''}',
-                lat: wgs.latitude,
-                lng: wgs.longitude,
-                gcjLat: gcjLat,
-                gcjLng: gcjLng,
+                name: displayName.isNotEmpty ? displayName : '未知位置',
+                lat: lat,
+                lng: lng,
+                gcjLat: gcj.latitude,
+                gcjLng: gcj.longitude,
               );
             }).toList();
             _searching = false;
@@ -145,8 +153,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _searching = false);
+        final msg = e.toString().contains('Timeout')
+            ? '搜索超时，请重试或直接在地图上点击选择位置'
+            : '搜索服务暂不可用，请直接在地图上点击选择位置';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('搜索失败: $e'), duration: const Duration(seconds: 2)),
+          SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
         );
       }
     }

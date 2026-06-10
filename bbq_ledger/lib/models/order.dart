@@ -46,19 +46,29 @@ class Order {
   });
 
   factory Order.fromJson(Map<String, dynamic> json, {List<OrderItem> items = const []}) {
-    final notes = (json['customer_notes'] as String?) ?? '';
+    // Handle both flat keys (customer_name) and nested (customers.name)
+    final customersJson = json['customers'] as Map<String, dynamic>?;
+    final createdByJson = json['created_by_user'] as Map<String, dynamic>?;
+    final claimedByJson = json['claimed_by_user'] as Map<String, dynamic>?;
+
+    final customerName = (customersJson?['name'] as String?) ?? (json['customer_name'] as String?) ?? '';
+    final customerAddress = (customersJson?['address'] as String?) ?? (json['customer_address'] as String?) ?? '';
+    final notes = (customersJson?['notes'] as String?) ?? (json['customer_notes'] as String?) ?? '';
+    final createdByName = (createdByJson?['name'] as String?) ?? (json['created_by_name'] as String?) ?? '';
+    final claimedByName = (claimedByJson?['name'] as String?) ?? (json['claimed_by_name'] as String?) ?? '';
+
     final (lat, lng) = _parseCoords(notes);
     return Order(
       id: json['id'] as String?,
       customerId: json['customer_id'] as String,
-      customerName: (json['customer_name'] as String?) ?? '',
-      customerAddress: (json['customer_address'] as String?) ?? '',
+      customerName: customerName,
+      customerAddress: customerAddress,
       customerLatitude: lat,
       customerLongitude: lng,
       createdBy: json['created_by'] as String,
-      createdByName: (json['created_by_name'] as String?) ?? '',
+      createdByName: createdByName,
       claimedBy: json['claimed_by'] as String?,
-      claimedByName: (json['claimed_by_name'] as String?) ?? '',
+      claimedByName: claimedByName,
       status: parseStatus(json['status'] as String),
       deliveryDeadline: json['delivery_deadline'] != null
           ? DateTime.parse(json['delivery_deadline'] as String)

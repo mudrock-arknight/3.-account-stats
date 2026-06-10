@@ -37,6 +37,7 @@ class OrderItem {
       'product_id': productId,
       'quantity': quantity,
       'unit_price': unitPrice,
+      'unit': productUnit,
     };
   }
 }

@@ -31,6 +31,7 @@ class OrderService {
       'product_id': item.productId,
       'quantity': item.quantity,
       'unit_price': item.unitPrice,
+      'unit': item.productUnit,
     }).toList();
 
     await _client.from('order_items').insert(itemRows);
@@ -106,7 +107,7 @@ class OrderService {
   Future<List<OrderItem>> getOrderItems(String orderId) async {
     final response = await _client.from('order_items').select('''
       *,
-      products:product_id(name, unit)
+      products:product_id(name)
     ''').eq('order_id', orderId);
 
     return (response as List).map((row) {
@@ -114,7 +115,7 @@ class OrderService {
         id: row['id'],
         productId: row['product_id'],
         productName: row['products']?['name'] ?? '',
-        productUnit: row['products']?['unit'] ?? '包',
+        productUnit: (row['unit'] as String?) ?? '包',
         quantity: (row['quantity'] as num).toDouble(),
         unitPrice: (row['unit_price'] as num).toDouble(),
         subtotal: (row['subtotal'] as num).toDouble(),
