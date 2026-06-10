@@ -251,6 +251,54 @@ build/app/outputs/flutter-apk/app-release.apk
 
 ---
 
+## AI 协作永久规则
+
+以下规则在所有对话中必须严格遵守：
+
+### 规则 1：版本号管理
+
+每次修改代码后，必须根据修改性质更新 `pubspec.yaml` 中的版本号（格式：`MAJOR.MINOR.PATCH+BUILD`）。
+
+**版本号更新规则：**
+
+| 修改类型 | 变更位 | 示例 |
+|---------|--------|------|
+| Bug 修复（修崩溃、修逻辑错误） | PATCH +1, BUILD +1 | `1.0.0+1` → `1.0.1+2` |
+| 新功能 / 功能改进 | MINOR +1, PATCH 归零, BUILD +1 | `1.0.5+6` → `1.1.0+7` |
+| 重大架构变更 / 不兼容改动 | MAJOR +1, MINOR/PATCH 归零, BUILD +1 | `1.5.2+20` → `2.0.0+21` |
+
+- BUILD 号每次变更必须 +1，MAJOR/MINOR/PATCH 按上表规则变更。
+- 同一轮对话中多次修改，BUILD 号只递增一次（在最终构建前统一更新）。
+
+### 规则 2：构建 + Git 提交流程
+
+每次修改代码并确认 APK 构建无报错后，执行以下步骤：
+
+1. 更新版本号（按规则 1）
+2. 构建 APK：`flutter build apk --target-platform android-arm64`
+3. 构建成功后，提交并推送整个项目到 git：
+   ```bash
+   git add -A
+   git commit -m "<简要描述本次修改>"
+   git push
+   ```
+4. 告知用户构建产物位置和 git commit hash
+
+### 规则 3：网址输出格式
+
+给用户的所有网址/链接，统一放在 **markdown 代码块** 内，每条网址独占一行，不附带任何文字、注释或说明。
+
+```
+https://example.com/link1
+https://example.com/link2
+```
+
+### 规则 4：不确定时主动询问
+
+遇到任何不明确的需求、模糊的描述、或多种实现方案可选时，必须主动使用 `AskUserQuestion` 工具向用户确认，禁止自行猜测后直接执行。
+
+---
+
 ## 依赖版本速查
 
 | 包 | 版本 | 用途 |
