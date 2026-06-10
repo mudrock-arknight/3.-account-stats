@@ -236,9 +236,11 @@ class OrderService {
           .select('order_id, products:product_id(name)')
           .inFilter('order_id', orderIds);
 
-      // For each product keyword, find matching orders
+      final itemList = itemResponse as List;
+
+      // Intersection: orders must match ALL product keywords
       for (final kw in productKeywords) {
-        final matchedOrderIds = (itemResponse as List)
+        final matchedOrderIds = itemList
             .where((item) {
               final productName = (item['products']?['name'] ?? '').toString().toLowerCase();
               return productName.contains(kw.toLowerCase());

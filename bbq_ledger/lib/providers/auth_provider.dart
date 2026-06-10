@@ -16,7 +16,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoggedIn => _currentUser != null;
   bool get loading => _loading;
 
-String? _error;
+  String? _error;
 
   String? get error => _error;
 
@@ -32,7 +32,9 @@ String? _error;
     }
     _loading = false;
     notifyListeners();
-  }Future<void> login(String userId) async {
+  }
+
+  Future<void> login(String userId) async {
     final user = _users.firstWhere(
       (u) => u.id == userId,
       orElse: () => _users.first,

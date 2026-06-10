@@ -1,4 +1,5 @@
 // lib/screens/location_picker_screen.dart
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -34,6 +35,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   bool _locating = true;
   String _statusText = '正在获取当前位置...';
   List<_SearchResult> _searchResults = [];
+
+  // Debounce + request cancellation
+  Timer? _debounceTimer;
+  http.Client? _pendingClient;
 
   @override
   void initState() {
@@ -90,76 +95,92 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    _pendingClient?.close();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _search(String query) async {
+  /// Called on every keystroke — debounced to 500ms to avoid flooding the API.
+  void _onSearchChanged(String query) {
+    _debounceTimer?.cancel();
     if (query.trim().length < 2) {
-      setState(() => _searchResults = []);
+      setState(() {
+        _searching = false;
+        _searchResults = [];
+      });
       return;
     }
+    // Show spinner immediately while waiting for debounce
     setState(() => _searching = true);
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      _doSearch(query.trim());
+    });
+  }
+
+  Future<void> _doSearch(String query) async {
+    // Cancel any previous in-flight request
+    _pendingClient?.close();
+    final client = http.Client();
+    _pendingClient = client;
+
     try {
-      // Use Photon (Komoot) geocoding API — free, no key required, based on OpenStreetMap data
       final uri = Uri.https(
         'photon.komoot.io',
         '/api/',
         {'q': query, 'limit': '5', 'lang': 'zh'},
       );
 
-      final response = await http.get(
+      final response = await client.get(
         uri,
         headers: {'User-Agent': 'BBQLedger/1.0'},
       ).timeout(const Duration(seconds: 8));
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final features = data['features'] as List? ?? [];
-        if (mounted) {
-          setState(() {
-            _searchResults = features.map((f) {
-              final props = f['properties'] as Map<String, dynamic>? ?? {};
-              final geom = f['geometry'] as Map<String, dynamic>? ?? {};
-              final coords = (geom['coordinates'] as List?) ?? [0, 0];
-              // Photon returns (lng, lat) in WGS-84
-              final lng = (coords[0] as num).toDouble();
-              final lat = (coords[1] as num).toDouble();
-              // Build display name from available properties
-              final parts = <String>[
-                props['name']?.toString(),
-                props['street']?.toString(),
-                props['city']?.toString(),
-                props['state']?.toString(),
-              ].where((s) => s != null && s.isNotEmpty).cast<String>().toList();
-              final displayName = parts.join(', ');
+        setState(() {
+          _searchResults = features.map((f) {
+            final props = f['properties'] as Map<String, dynamic>? ?? {};
+            final geom = f['geometry'] as Map<String, dynamic>? ?? {};
+            final coords = (geom['coordinates'] as List?) ?? [0, 0];
+            // Photon returns (lng, lat) in WGS-84
+            final lng = (coords[0] as num).toDouble();
+            final lat = (coords[1] as num).toDouble();
+            final parts = <String>[
+              props['name']?.toString(),
+              props['street']?.toString(),
+              props['city']?.toString(),
+              props['state']?.toString(),
+            ].where((s) => s != null && s.isNotEmpty).cast<String>().toList();
+            final displayName = parts.join(', ');
 
-              // Convert WGS-84 to GCJ-02 for display on Amap tiles
-              final gcj = _wgs84ToGcj02(lat, lng);
-              return _SearchResult(
-                name: displayName.isNotEmpty ? displayName : '未知位置',
-                lat: lat,
-                lng: lng,
-                gcjLat: gcj.latitude,
-                gcjLng: gcj.longitude,
-              );
-            }).toList();
-            _searching = false;
-          });
-        }
+            // Convert WGS-84 to GCJ-02 for display on Amap tiles
+            final gcj = _wgs84ToGcj02(lat, lng);
+            return _SearchResult(
+              name: displayName.isNotEmpty ? displayName : '未知位置',
+              lat: lat,
+              lng: lng,
+              gcjLat: gcj.latitude,
+              gcjLng: gcj.longitude,
+            );
+          }).toList();
+          _searching = false;
+        });
       } else {
-        if (mounted) setState(() => _searching = false);
+        setState(() => _searching = false);
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _searching = false);
-        final msg = e.toString().contains('Timeout')
-            ? '搜索超时，请重试或直接在地图上点击选择位置'
-            : '搜索服务暂不可用，请直接在地图上点击选择位置';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _searching = false);
+      final msg = e is http.ClientException || e.toString().contains('Timeout')
+          ? '搜索超时，请重试或直接在地图上点击选择位置'
+          : '搜索服务暂不可用，请直接在地图上点击选择位置';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+      );
     }
   }
 
@@ -274,8 +295,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                   )
                                 : null,
                       ),
-                      onChanged: _search,
-                      onSubmitted: (q) => _search(q),
+                      onChanged: _onSearchChanged,
+                      onSubmitted: (q) => _doSearch(q.trim()),
                     ),
                   ),
                 ),
