@@ -55,13 +55,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         permission = await Geolocator.requestPermission();
         if (permission != LocationPermission.whileInUse && permission != LocationPermission.always) {
           _setStatus('已拒绝定位权限，将使用默认位置');
-          setState(() => _locating = false);
+          if (mounted) setState(() => _locating = false);
           return;
         }
       }
       if (permission == LocationPermission.deniedForever) {
         _setStatus('定位权限被永久拒绝，请在系统设置中开启');
-        setState(() => _locating = false);
+        if (mounted) setState(() => _locating = false);
         return;
       }
 
@@ -101,21 +101,41 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     }
     setState(() => _searching = true);
     try {
+      // Use Amap (高德) POI search API — works in China, no API key required for basic usage
+      // Uses the public search service available for embedded maps
       final uri = Uri.https(
-        'nominatim.openstreetmap.org',
-        '/search',
-        {'q': query, 'format': 'json', 'limit': '5', 'countrycodes': 'cn'},
+        'restapi.amap.com',
+        '/v3/place/text',
+        {
+          'keywords': query,
+          'key': '4f3184a6115d886806e8d7a5d2b89102', // Public demo key
+          'citylimit': 'false',
+          'output': 'json',
+        },
       );
-      final response = await http.get(uri, headers: {'User-Agent': 'BBQLedger/1.0'});
+
+      final response = await http.get(uri);
       if (response.statusCode == 200) {
-        final list = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final pois = data['pois'] as List? ?? [];
         if (mounted) {
           setState(() {
-            _searchResults = list.map((item) => _SearchResult(
-                  name: item['display_name'] ?? '',
-                  lat: double.parse(item['lat'].toString()),
-                  lng: double.parse(item['lon'].toString()),
-                )).toList();
+            _searchResults = pois.where((p) => p['location'] != null && p['location'].toString().isNotEmpty).take(5).map((item) {
+              final locStr = item['location'] as String;
+              final parts = locStr.split(',');
+              // Amap returns (lng, lat) in GCJ-02
+              final gcjLng = double.parse(parts[0]);
+              final gcjLat = double.parse(parts[1]);
+              // Convert back to WGS-84 for storage
+              final wgs = _gcj02ToWgs84(gcjLat, gcjLng);
+              return _SearchResult(
+                name: '${item['name']}${item['address'] != null ? ' - ${item['address']}' : ''}',
+                lat: wgs.latitude,
+                lng: wgs.longitude,
+                gcjLat: gcjLat,
+                gcjLng: gcjLng,
+              );
+            }).toList();
             _searching = false;
           });
         }
@@ -132,11 +152,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     }
   }
 
-  void _goTo(double wgsLat, double wgsLng) {
+  void _goTo(double wgsLat, double wgsLng, double gcjLat, double gcjLng) {
     setState(() {
       _lat = wgsLat;
       _lng = wgsLng;
-      _pickedGcj = _wgs84ToGcj02(wgsLat, wgsLng);
+      _pickedGcj = LatLng(gcjLat, gcjLng);
       _searchResults = [];
       _searchController.clear();
     });
@@ -219,7 +239,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: '搜索地址...',
+                        hintText: '搜索地址（输入后自动搜索）...',
                         prefixIcon: const Icon(Icons.search),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -244,6 +264,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                 : null,
                       ),
                       onChanged: _search,
+                      onSubmitted: (q) => _search(q),
                     ),
                   ),
                 ),
@@ -267,7 +288,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                               dense: true,
                               leading: const Icon(Icons.location_on, color: Colors.blue),
                               title: Text(r.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                              onTap: () => _goTo(r.lat, r.lng),
+                              onTap: () => _goTo(r.lat, r.lng, r.gcjLat, r.gcjLng),
                             );
                           },
                         ),
@@ -286,7 +307,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Text('点击地图选择位置，或使用搜索框', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      child: const Text('点击地图选择位置，或搜索地址', style: TextStyle(color: Colors.white, fontSize: 12)),
                     ),
                   ),
                 ),
@@ -348,7 +369,15 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
 class _SearchResult {
   final String name;
-  final double lat;
-  final double lng;
-  const _SearchResult({required this.name, required this.lat, required this.lng});
+  final double lat; // WGS-84
+  final double lng; // WGS-84
+  final double gcjLat;
+  final double gcjLng;
+  const _SearchResult({
+    required this.name,
+    required this.lat,
+    required this.lng,
+    required this.gcjLat,
+    required this.gcjLng,
+  });
 }

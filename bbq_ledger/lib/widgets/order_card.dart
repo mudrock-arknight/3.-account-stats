@@ -63,15 +63,22 @@ class OrderCard extends StatelessWidget {
               _InfoRow(icon: Icons.access_time, text: '要求送达: ${dateFormat.format(order.deliveryDeadline!)}'),
             if (order.deliveredAt != null)
               _InfoRow(icon: Icons.check_circle_outline, text: '实际送达: ${dateFormat.format(order.deliveredAt!)}'),
-            if (order.customerLatitude != null && order.customerLongitude != null && order.customerAddress.isNotEmpty)
+            if (order.customerAddress.isNotEmpty)
               InkWell(
-                onTap: () => _openNavigation(context, order),
-                child: _InfoRow(icon: Icons.navigation, text: order.customerAddress, color: Colors.blue),
-              )
-            else if (order.customerAddress.isNotEmpty)
-              InkWell(
-                onTap: () => _copyAddress(context, order.customerAddress),
-                child: _InfoRow(icon: Icons.location_on, text: order.customerAddress, color: Colors.grey),
+                onTap: () {
+                  if (order.customerLatitude != null && order.customerLongitude != null) {
+                    _openNavigation(context, order);
+                  } else {
+                    _openNavigationByAddress(context, order);
+                  }
+                },
+                child: _InfoRow(
+                  icon: (order.customerLatitude != null && order.customerLongitude != null)
+                      ? Icons.navigation
+                      : Icons.location_on,
+                  text: order.customerAddress,
+                  color: Colors.blue,
+                ),
               ),
             _InfoRow(icon: Icons.person, text: '记账: ${order.createdByName}'),
             if (order.claimedByName != null && order.claimedByName!.isNotEmpty)
@@ -152,11 +159,41 @@ void _openNavigation(BuildContext context, Order order) async {
   }
 }
 
-void _copyAddress(BuildContext context, String address) {
-  Clipboard.setData(ClipboardData(text: address));
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('地址已复制到剪贴板'), duration: Duration(seconds: 1)),
-  );
+void _openNavigationByAddress(BuildContext context, Order order) async {
+  final availableMaps = await MapLauncher.installedMaps;
+  if (context.mounted && availableMaps.isNotEmpty) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('选择导航应用（地址搜索）', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          ...availableMaps.take(5).map((map) => ListTile(
+                leading: Image.asset(map.icon, width: 32, height: 32),
+                title: Text(map.mapName),
+                onTap: () {
+                  map.showDirections(
+                    destination: Coords(0, 0),
+                    destinationTitle: order.customerAddress,
+                  );
+                  Navigator.pop(ctx);
+                },
+              )),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  } else {
+    Clipboard.setData(ClipboardData(text: order.customerAddress));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('地址已复制到剪贴板，请打开地图软件搜索'), duration: Duration(seconds: 2)),
+      );
+    }
+  }
 }
 
 class _InfoRow extends StatelessWidget {
