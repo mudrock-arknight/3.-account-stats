@@ -129,6 +129,21 @@ class OrderCard extends StatelessWidget {
   }
 }
 
+/// Map English names from map_launcher to Chinese display names.
+String _mapDisplayName(AvailableMap map) {
+  const translations = {
+    'Baidu Maps': '百度地图',
+    'Amap': '高德地图',
+    'Gaode Map': '高德地图',
+    'Tencent Map': '腾讯地图',
+    'Google Maps': 'Google 地图',
+    'Waze': 'Waze',
+    'Apple Maps': 'Apple 地图',
+    'Petal Maps': '花瓣地图',
+  };
+  return translations[map.mapName] ?? map.mapName;
+}
+
 void _openNavigation(BuildContext context, Order order) async {
   final availableMaps = await MapLauncher.installedMaps;
   if (context.mounted && availableMaps.isNotEmpty) {
@@ -143,7 +158,7 @@ void _openNavigation(BuildContext context, Order order) async {
           ),
           ...availableMaps.take(5).map((map) => ListTile(
                 leading: Image.asset(map.icon, width: 32, height: 32),
-                title: Text(map.mapName),
+                title: Text(_mapDisplayName(map)),
                 onTap: () {
                   map.showDirections(
                     destination: Coords(order.customerLatitude!, order.customerLongitude!),
@@ -173,7 +188,7 @@ void _openNavigationByAddress(BuildContext context, Order order) async {
           ),
           ...availableMaps.take(5).map((map) => ListTile(
                 leading: Image.asset(map.icon, width: 32, height: 32),
-                title: Text(map.mapName),
+                title: Text(_mapDisplayName(map)),
                 onTap: () {
                   map.showDirections(
                     destination: Coords(0, 0),
