@@ -1,5 +1,6 @@
 // lib/screens/location_picker_screen.dart
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -23,12 +24,15 @@ class LocationPickerScreen extends StatefulWidget {
 }
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
+  // WGS-84 coordinates (stored, real GPS)
   late double _lat;
   late double _lng;
-  LatLng? _picked;
+  // GCJ-02 coordinates (display only, for Amap tiles alignment)
+  LatLng? _pickedGcj;
   final _searchController = TextEditingController();
   bool _searching = false;
   bool _locating = true;
+  String _statusText = '正在获取当前位置...';
   List<_SearchResult> _searchResults = [];
 
   @override
@@ -37,7 +41,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _lat = widget.initialLat ?? 39.9042;
     _lng = widget.initialLng ?? 116.4074;
     if (widget.initialLat != null) {
-      _picked = LatLng(_lat, _lng);
+      _pickedGcj = _wgs84ToGcj02(_lat, _lng);
       _locating = false;
     }
     _getCurrentLocation();
@@ -45,34 +49,43 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   Future<void> _getCurrentLocation() async {
     try {
-      final permission = await Geolocator.checkPermission();
+      _setStatus('正在请求定位权限...');
+      LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
-        final result = await Geolocator.requestPermission();
-        if (result != LocationPermission.whileInUse && result != LocationPermission.always) {
+        permission = await Geolocator.requestPermission();
+        if (permission != LocationPermission.whileInUse && permission != LocationPermission.always) {
+          _setStatus('已拒绝定位权限，将使用默认位置');
           setState(() => _locating = false);
           return;
         }
       }
       if (permission == LocationPermission.deniedForever) {
+        _setStatus('定位权限被永久拒绝，请在系统设置中开启');
         setState(() => _locating = false);
         return;
       }
 
+      _setStatus('正在获取GPS位置...');
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
+        timeLimit: const Duration(seconds: 15),
       );
       if (mounted) {
         setState(() {
           _lat = position.latitude;
           _lng = position.longitude;
-          _picked = LatLng(_lat, _lng);
+          _pickedGcj = _wgs84ToGcj02(_lat, _lng);
           _locating = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      _setStatus('GPS获取失败($e)，使用默认位置');
       if (mounted) setState(() => _locating = false);
     }
+  }
+
+  void _setStatus(String msg) {
+    if (mounted) setState(() => _statusText = msg);
   }
 
   @override
@@ -119,38 +132,45 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     }
   }
 
-  void _goTo(double lat, double lng) {
+  void _goTo(double wgsLat, double wgsLng) {
     setState(() {
-      _lat = lat;
-      _lng = lng;
-      _picked = LatLng(lat, lng);
+      _lat = wgsLat;
+      _lng = wgsLng;
+      _pickedGcj = _wgs84ToGcj02(wgsLat, wgsLng);
       _searchResults = [];
       _searchController.clear();
     });
   }
 
+  void _confirm() {
+    if (_pickedGcj != null) {
+      Navigator.pop(context, {'lat': _lat, 'lng': _lng});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Map center in GCJ-02 for display alignment with Amap tiles
+    final centerGcj = _wgs84ToGcj02(_lat, _lng);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
           TextButton(
-            onPressed: _picked != null
-                ? () => Navigator.pop(context, {'lat': _picked!.latitude, 'lng': _picked!.longitude})
-                : null,
+            onPressed: _pickedGcj != null ? _confirm : null,
             child: const Text('确认', style: TextStyle(color: Colors.white, fontSize: 16)),
           ),
         ],
       ),
       body: _locating
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('正在获取当前位置...'),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(_statusText),
                 ],
               ),
             )
@@ -158,22 +178,31 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               children: [
                 FlutterMap(
                   options: MapOptions(
-                    initialCenter: LatLng(_lat, _lng),
+                    initialCenter: centerGcj,
                     initialZoom: 16.0,
                     onTap: (tapPosition, point) {
-                      setState(() => _picked = point);
+                      // point is in GCJ-02 (aligned with Amap tiles)
+                      // Convert back to WGS-84 for storage
+                      final wgs = _gcj02ToWgs84(point.latitude, point.longitude);
+                      setState(() {
+                        _lat = wgs.latitude;
+                        _lng = wgs.longitude;
+                        _pickedGcj = point;
+                      });
                     },
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      // Amap (高德) tiles — works in China
+                      urlTemplate: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                      subdomains: const ['1', '2', '3', '4'],
                       userAgentPackageName: 'com.bbq.ledger',
                     ),
-                    if (_picked != null)
+                    if (_pickedGcj != null)
                       MarkerLayer(
                         markers: [
                           Marker(
-                            point: _picked!,
+                            point: _pickedGcj!,
                             child: const Icon(Icons.location_on, color: Colors.red, size: 40),
                           ),
                         ],
@@ -245,9 +274,75 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       ),
                     ),
                   ),
+                // Center crosshair hint
+                Positioned(
+                  bottom: 20,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Text('点击地图选择位置，或使用搜索框', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    ),
+                  ),
+                ),
               ],
             ),
     );
+  }
+
+  // ===== GCJ-02 / WGS-84 conversion =====
+
+  static const double _a = 6378245.0;
+  static const double _ee = 0.00669342162296594323;
+
+  static bool _outOfChina(double lat, double lng) {
+    return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271;
+  }
+
+  static double _transformLat(double x, double y) {
+    double ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * sqrt(x.abs());
+    ret += (20.0 * sin(6.0 * x * pi) + 20.0 * sin(2.0 * x * pi)) * 2.0 / 3.0;
+    ret += (20.0 * sin(y * pi) + 40.0 * sin(y / 3.0 * pi)) * 2.0 / 3.0;
+    ret += (160.0 * sin(y / 12.0 * pi) + 320 * sin(y * pi / 30.0)) * 2.0 / 3.0;
+    return ret;
+  }
+
+  static double _transformLng(double x, double y) {
+    double ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * sqrt(x.abs());
+    ret += (20.0 * sin(6.0 * x * pi) + 20.0 * sin(2.0 * x * pi)) * 2.0 / 3.0;
+    ret += (20.0 * sin(x * pi) + 40.0 * sin(x / 3.0 * pi)) * 2.0 / 3.0;
+    ret += (150.0 * sin(x / 12.0 * pi) + 300.0 * sin(x / 30.0 * pi)) * 2.0 / 3.0;
+    return ret;
+  }
+
+  static LatLng _wgs84ToGcj02(double lat, double lng) {
+    if (_outOfChina(lat, lng)) return LatLng(lat, lng);
+    double dLat = _transformLat(lng - 105.0, lat - 35.0);
+    double dLng = _transformLng(lng - 105.0, lat - 35.0);
+    double radLat = lat / 180.0 * pi;
+    double magic = sin(radLat);
+    magic = 1 - _ee * magic * magic;
+    double sqrtMagic = sqrt(magic);
+    dLat = (dLat * 180.0) / ((_a * (1 - _ee)) / (magic * sqrtMagic) * pi);
+    dLng = (dLng * 180.0) / (_a / sqrtMagic * cos(radLat) * pi);
+    return LatLng(lat + dLat, lng + dLng);
+  }
+
+  static LatLng _gcj02ToWgs84(double lat, double lng) {
+    if (_outOfChina(lat, lng)) return LatLng(lat, lng);
+    // Newton's method reverse iteration
+    double gLat = lat, gLng = lng;
+    for (int i = 0; i < 5; i++) {
+      final wgs = _wgs84ToGcj02(gLat, gLng);
+      gLat += lat - wgs.latitude;
+      gLng += lng - wgs.longitude;
+    }
+    return LatLng(gLat, gLng);
   }
 }
 
