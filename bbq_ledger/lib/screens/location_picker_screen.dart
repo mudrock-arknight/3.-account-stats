@@ -149,7 +149,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             // Photon returns (lng, lat) in WGS-84
             final lng = (coords[0] as num).toDouble();
             final lat = (coords[1] as num).toDouble();
-            final parts = <String>[
+            final parts = <String?>[
               props['name']?.toString(),
               props['street']?.toString(),
               props['city']?.toString(),
