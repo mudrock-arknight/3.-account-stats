@@ -35,8 +35,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   List<Customer> _filteredCustomers = [];
   List<Product> _filteredProducts = [];
 
-  // Common units
-  static const List<String> _commonUnits = ['包', '件', '条', '斤', '箱', '瓶', '袋', '盒'];
+  // Common units (only 3 options: 包, 件, 条)
+  static const List<String> _commonUnits = ['包', '件', '条'];
 
   @override
   void initState() {
