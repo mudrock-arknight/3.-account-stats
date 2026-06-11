@@ -178,21 +178,36 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen> {
   }
 
   Future<void> _importFromContacts() async {
-    // Request permission
-    if (!await FlutterContacts.requestPermission()) {
+    // Check if permission is already granted
+    bool hasPermission = await FlutterContacts.requestPermission();
+
+    if (!hasPermission) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('需要通讯录权限才能导入联系人')),
+          const SnackBar(
+            content: Text('需要通讯录权限才能导入联系人，请在系统设置中授予权限'),
+            duration: Duration(seconds: 3),
+          ),
         );
       }
       return;
     }
 
     // Load contacts with phone numbers
-    final contacts = await FlutterContacts.getContacts(
-      withProperties: true,
-      withPhoto: false,
-    );
+    List<Contact> contacts;
+    try {
+      contacts = await FlutterContacts.getContacts(
+        withProperties: true,
+        withPhoto: false,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('读取通讯录失败: $e')),
+        );
+      }
+      return;
+    }
 
     // Filter: only contacts with name and phone
     final valid = contacts.where((c) =>
@@ -209,7 +224,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen> {
       return;
     }
 
-    // Show selection dialog
+    // Show selection dialog with select all / deselect all
     final selected = <Contact>{};
     await showDialog(
       context: context,
@@ -222,9 +237,29 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('找到 ${valid.length} 个联系人，选择要导入的：'),
+                Row(
+                  children: [
+                    Text('找到 ${valid.length} 个联系人'),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {
+                        setDialogState(() {
+                          if (selected.length == valid.length) {
+                            selected.clear();
+                          } else {
+                            selected.addAll(valid);
+                          }
+                        });
+                      },
+                      child: Text(
+                        selected.length == valid.length ? '取消全选' : '全选',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 8),
-                Flexible(
+                Expanded(
                   child: ListView.builder(
                     shrinkWrap: true,
                     itemCount: valid.length,
@@ -254,7 +289,6 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen> {
             FilledButton(
               onPressed: selected.isEmpty ? null : () async {
                 Navigator.pop(ctx);
-                // Import selected contacts
                 int imported = 0;
                 for (final c in selected) {
                   final existing = _customers.where((cust) =>

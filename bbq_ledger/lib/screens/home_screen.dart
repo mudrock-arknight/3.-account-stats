@@ -13,6 +13,7 @@ import 'monthly_report_screen.dart';
 import 'daily_report_screen.dart';
 import 'product_management_screen.dart';
 import 'customer_management_screen.dart';
+import 'inventory_screen.dart';
 import 'order_overview_screen.dart';
 import 'import_screen.dart';
 import 'login_screen.dart';
@@ -154,6 +155,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductManagementScreen())),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.warehouse),
+                  title: const Text('库存管理'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InventoryScreen())),
+                ),
+                ListTile(
                   leading: const Icon(Icons.bar_chart),
                   title: const Text('月度汇总报表'),
                   trailing: const Icon(Icons.chevron_right),
@@ -194,10 +201,10 @@ class _QuickActionCard extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: Colors.white, size: 30),
-              const SizedBox(height: 6),
+              Icon(icon, color: Colors.white, size: 32),
+              const SizedBox(height: 8),
               Text(label,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
                   textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
             ],
           ),

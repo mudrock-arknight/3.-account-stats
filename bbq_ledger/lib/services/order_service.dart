@@ -59,6 +59,8 @@ class OrderService {
   Future<List<Order>> getOrders({
     List<String>? statuses,
     String? claimedBy,
+    DateTime? dateFrom,
+    DateTime? dateTo,
   }) async {
     var query = _client.from('orders').select('''
       *,
@@ -72,6 +74,12 @@ class OrderService {
     }
     if (claimedBy != null) {
       query = query.eq('claimed_by', claimedBy);
+    }
+    if (dateFrom != null) {
+      query = query.gte('created_at', dateFrom.toIso8601String());
+    }
+    if (dateTo != null) {
+      query = query.lte('created_at', dateTo.toIso8601String());
     }
 
     final response = await query.order('created_at', ascending: false);
@@ -137,6 +145,25 @@ class OrderService {
       'delivered_at': DateTime.now().toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
     }).eq('id', orderId);
+
+    // Auto-deduct inventory: for each order item, record a stock-out
+    try {
+      final items = await getOrderItems(orderId);
+      if (items.isNotEmpty) {
+        final now = DateTime.now().toIso8601String();
+        final records = items.map((item) => {
+          'product_id': item.productId,
+          'type': 'out',
+          'quantity': item.quantity,
+          'note': '订单出货',
+          'related_order_id': orderId,
+          'created_at': now,
+        }).toList();
+        await _client.from('inventory_records').insert(records);
+      }
+    } catch (_) {
+      // Silently ignore inventory errors — don't block delivery
+    }
   }
 
   Future<void> markPaid(String orderId) async {

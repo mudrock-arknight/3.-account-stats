@@ -1,7 +1,7 @@
 name: bbq_ledger
 description: BBQ 烧烤原料批发客户账本
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: '>=3.1.0 <4.0.0'

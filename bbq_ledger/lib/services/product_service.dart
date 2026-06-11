@@ -116,6 +116,31 @@ class ProductService {
     });
   }
 
+  /// Get all customer-product prices for a specific product.
+  /// Returns list of (customerId, customerName, productUnit, unitPrice).
+  Future<List<({String customerId, String customerName, String unit, double price})>> getCustomerPrices(String productId) async {
+    final response = await _client
+        .from('customer_product_prices')
+        .select('''
+          customer_id,
+          unit_price,
+          customers:customer_id(name)
+        ''')
+        .eq('product_id', productId)
+        .order('updated_at', ascending: false);
+
+    // Also fetch product prefs from customer notes for more unit info
+    return (response as List).map((row) {
+      final customerName = (row['customers'] as Map<String, dynamic>?)?['name'] as String? ?? '';
+      return (
+        customerId: row['customer_id'] as String,
+        customerName: customerName,
+        unit: '', // Will be filled from notes or left empty
+        price: (row['unit_price'] as num).toDouble(),
+      );
+    }).toList();
+  }
+
   // --- Helpers ---
 
   Future<Map<String, dynamic>?> _getCustomerNotes(String customerId) async {

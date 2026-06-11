@@ -14,9 +14,12 @@ class OrderOverviewScreen extends StatefulWidget {
 
 class _OrderOverviewScreenState extends State<OrderOverviewScreen> {
   final OrderService _orderService = OrderService();
+  final DateFormat _dateFormat = DateFormat('MM/dd');
   List<Order> _orders = [];
   bool _loading = true;
   String? _statusFilter;
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
 
   static const _filters = [
     {'label': '全部', 'value': null},
@@ -29,6 +32,10 @@ class _OrderOverviewScreenState extends State<OrderOverviewScreen> {
   @override
   void initState() {
     super.initState();
+    // Default to today
+    final now = DateTime.now();
+    _dateFrom = DateTime(now.year, now.month, now.day);
+    _dateTo = DateTime(now.year, now.month, now.day, 23, 59, 59);
     _load();
   }
 
@@ -36,6 +43,8 @@ class _OrderOverviewScreenState extends State<OrderOverviewScreen> {
     setState(() => _loading = true);
     final orders = await _orderService.getOrders(
       statuses: _statusFilter != null ? [_statusFilter!] : null,
+      dateFrom: _dateFrom,
+      dateTo: _dateTo,
     );
     setState(() {
       _orders = orders;
@@ -53,6 +62,88 @@ class _OrderOverviewScreenState extends State<OrderOverviewScreen> {
       appBar: AppBar(title: const Text('订单总览')),
       body: Column(
         children: [
+          // Date range picker
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            color: Colors.blue.shade50,
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: _dateFrom ?? DateTime.now(),
+                        firstDate: DateTime(2024),
+                        lastDate: DateTime.now(),
+                      );
+                      if (date != null) {
+                        setState(() => _dateFrom = DateTime(date.year, date.month, date.day));
+                        _load();
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: '开始',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                      child: Text(
+                        _dateFrom != null ? _dateFormat.format(_dateFrom!) : '不限',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Text('至', style: TextStyle(color: Colors.grey)),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: _dateTo ?? DateTime.now(),
+                        firstDate: DateTime(2024),
+                        lastDate: DateTime.now(),
+                      );
+                      if (date != null) {
+                        setState(() => _dateTo = DateTime(date.year, date.month, date.day, 23, 59, 59));
+                        _load();
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: '结束',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                      child: Text(
+                        _dateTo != null ? _dateFormat.format(_dateTo!) : '不限',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.clear, size: 20),
+                  tooltip: '清除日期',
+                  onPressed: () {
+                    setState(() {
+                      _dateFrom = null;
+                      _dateTo = null;
+                    });
+                    _load();
+                  },
+                ),
+              ],
+            ),
+          ),
+
           // Summary bar
           Container(
             padding: const EdgeInsets.all(12),
