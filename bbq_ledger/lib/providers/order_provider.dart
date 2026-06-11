@@ -1,4 +1,3 @@
-// lib/providers/order_provider.dart
 import 'package:flutter/foundation.dart';
 import '../models/order.dart';
 import '../services/order_service.dart';

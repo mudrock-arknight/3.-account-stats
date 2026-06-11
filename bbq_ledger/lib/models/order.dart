@@ -1,4 +1,3 @@
-// lib/models/order.dart
 import 'dart:convert';
 import 'order_item.dart';
 

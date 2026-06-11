@@ -1,4 +1,3 @@
-// lib/models/order_item.dart
 class OrderItem {
   final String? id;
   final String productId;

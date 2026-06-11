@@ -1,4 +1,3 @@
-// lib/models/customer.dart
 import 'dart:convert';
 
 class Customer {

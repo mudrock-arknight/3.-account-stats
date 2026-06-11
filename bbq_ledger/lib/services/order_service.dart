@@ -1,4 +1,3 @@
-// lib/services/order_service.dart
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/order.dart';

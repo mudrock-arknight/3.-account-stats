@@ -1,4 +1,3 @@
-// lib/services/customer_service.dart
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/customer.dart';
 

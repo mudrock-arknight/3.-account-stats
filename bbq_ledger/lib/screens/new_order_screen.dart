@@ -1,4 +1,3 @@
-// lib/screens/new_order_screen.dart
 import 'package:flutter/material.dart';
 import '../models/customer.dart';
 import '../models/product.dart';

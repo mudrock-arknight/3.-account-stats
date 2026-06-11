@@ -1,4 +1,3 @@
-// lib/models/product.dart
 class Product {
   final String id;
   final String name;

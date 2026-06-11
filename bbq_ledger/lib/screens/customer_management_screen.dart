@@ -1,4 +1,3 @@
-// lib/screens/customer_management_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../models/customer.dart';

@@ -1,4 +1,3 @@
-// lib/screens/location_picker_screen.dart
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
