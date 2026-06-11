@@ -12,57 +12,13 @@
 
 **操作方式:** 通过 Supabase REST API（service_role key）直接操作
 
-- [ ] **Step 1: 删除旧用户**
+- [ ] **Step 1: 删除旧用户**（使用 Supabase Dashboard 或 REST API）
 
-```bash
-curl -X DELETE "https://wtoukdzykvuoycrolpfq.supabase.co/rest/v1/users?id=in.(用户ID列表)" \
-  -H "apikey: SERVICE_ROLE_KEY" \
-  -H "Authorization: Bearer SERVICE_ROLE_KEY"
-```
+- [ ] **Step 2: 删除旧产品**（使用 Supabase Dashboard 或 REST API）
 
-- [ ] **Step 2: 删除旧产品**
+- [ ] **Step 3: 插入新用户（6个）**（使用 Supabase Dashboard 或 REST API）
 
-```bash
-curl -X DELETE "https://wtoukdzykvuoycrolpfq.supabase.co/rest/v1/products?id=in.(产品ID列表)" \
-  -H "apikey: SERVICE_ROLE_KEY" \
-  -H "Authorization: Bearer SERVICE_ROLE_KEY"
-```
-
-- [ ] **Step 3: 插入新用户（6个）**
-
-```bash
-curl -X POST "https://wtoukdzykvuoycrolpfq.supabase.co/rest/v1/users" \
-  -H "apikey: SERVICE_ROLE_KEY" \
-  -H "Authorization: Bearer SERVICE_ROLE_KEY" \
-  -H "Content-Type: application/json" \
-  -H "Prefer: return=representation" \
-  -d '[
-    {"name":"临时用户","pin_code":"","avatar_color":"#9E9E9E"},
-    {"name":"宋子翔","pin_code":"","avatar_color":"#2196F3"},
-    {"name":"曾春香","pin_code":"","avatar_color":"#E91E63"},
-    {"name":"宋卫华","pin_code":"","avatar_color":"#4CAF50"},
-    {"name":"袁期桂","pin_code":"","avatar_color":"#FF9800"},
-    {"name":"宋卫民","pin_code":"","avatar_color":"#9C27B0"}
-  ]'
-```
-
-- [ ] **Step 4: 插入新产品（6个）**
-
-```bash
-curl -X POST "https://wtoukdzykvuoycrolpfq.supabase.co/rest/v1/products" \
-  -H "apikey: SERVICE_ROLE_KEY" \
-  -H "Authorization: Bearer SERVICE_ROLE_KEY" \
-  -H "Content-Type: application/json" \
-  -H "Prefer: return=representation" \
-  -d '[
-    {"name":"大火腿","unit":"箱"},
-    {"name":"3号肠","unit":"箱"},
-    {"name":"1号肠","unit":"箱"},
-    {"name":"鸡柳","unit":"箱"},
-    {"name":"南拳王","unit":"箱"},
-    {"name":"热狗","unit":"包"}
-  ]'
-```
+- [ ] **Step 4: 插入新产品（6个）**（使用 Supabase Dashboard 或 REST API）
 
 ---
 
@@ -493,19 +449,6 @@ Future<void> _addNewProduct() async {
 rm -rf /root/.gradle/daemon && cd /workspace/bbq_ledger && flutter build apk --release
 ```
 
-- [ ] **Step 2: 上传到 Supabase Storage（覆盖已有文件）**
+- [ ] **Step 2: 上传到 Supabase Storage（覆盖已有文件，使用统一下载地址）**
 
-```bash
-curl -X POST "https://wtoukdzykvuoycrolpfq.supabase.co/storage/v1/object/apk/app-release.apk" \
-  -H "apikey: SERVICE_ROLE_KEY" \
-  -H "Authorization: Bearer SERVICE_ROLE_KEY" \
-  -H "Content-Type: application/vnd.android.package-archive" \
-  -H "x-upsert: true" \
-  --data-binary @/workspace/bbq_ledger/build/app/outputs/flutter-apk/app-release.apk
-```
-
-- [ ] **Step 3: 验证下载链接**
-
-```
-https://wtoukdzykvuoycrolpfq.supabase.co/storage/v1/object/public/apk/app-release.apk
-```
+- [ ] **Step 3: 验证下载链接**（通过 Supabase Storage 管理界面获取）
