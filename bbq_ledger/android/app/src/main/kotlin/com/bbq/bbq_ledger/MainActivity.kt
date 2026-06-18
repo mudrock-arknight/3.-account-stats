@@ -1,0 +1,5 @@
+package com.bbq.bbq_ledger
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()
